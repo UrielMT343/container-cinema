@@ -1,0 +1,70 @@
+version: "3.9"
+
+services:
+  postgres:
+    image: postgres:${POSTGRES_VERSION}
+    container_name: postgres_db
+    restart: always
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_DB: ${POSTGRES_DB}
+    ports:
+      - "${POSTGRES_HOST_PORT}:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER} -d ${POSTGRES_DB}"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  redis:
+    image: redis:${REDIS_VERSION}
+    container_name: redis_cache
+    restart: always
+    ports:
+      - "${REDIS_PORT}:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  rabbitmq:
+    image: rabbitmq:${RABBITMQ_VERSION}
+    container_name: rabbitmq
+    ports:
+      - "${AMQP_PORT}:5672"
+      - "${MANAGEMENT_UI_PORT}:15672"
+    volumes:
+      - rabbitmq_data:/var/lib/rabbitmq/mnesia/
+      - rabbitmq_log:/var/log/rabbitmq/
+    healthcheck:
+      test: ["CMD", "rabbitmq-diagnostics", "-q", "ping"]
+      interval: 10s
+      timeout: 10s
+      retries: 5
+
+  backend-api:
+    build:
+      context: ../..
+      dockerfile: deploy/docker/api.Dockerfile
+    container_name: go_backend
+    restart: always
+    ports:
+      - "${API_PORT}:8080"
+    env_file:
+      - ../../.env
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
+
+volumes:
+  postgres_data:
+  rabbitmq_data:
+  rabbitmq_log:

@@ -1,0 +1,14 @@
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: migrator
+spec:
+  template:
+    spec:
+      containers:
+        - name: migrator
+          image: urielmt343/cinema_migrator:latest
+          envFrom:
+            - secretRef:
+                name: secret-store
+      restartPolicy: Never
