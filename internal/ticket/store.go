@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"start/internal/database"
+	"start/internal/models"
 
 	"github.com/google/uuid"
 )
@@ -19,7 +20,7 @@ func New(s *database.Service) *Store {
 
 var ErrNotFound = errors.New("ticket not found")
 
-func (s *Store) CreateTicket(ticket Ticket) (uuid.UUID, error) {
+func (s *Store) CreateTicket(ticket models.Ticket) (models.Ticket, error) {
 	pool := s.db.GetDB()
 
 	query := `
@@ -40,19 +41,19 @@ func (s *Store) CreateTicket(ticket Ticket) (uuid.UUID, error) {
 
 	if err != nil {
 		if err.Error() == "no rows in result set" {
-			return uuid.Nil, fmt.Errorf("Conflict: seat %v is already taken or held", ticket.IdSeat)
+			return models.Ticket{}, fmt.Errorf("Conflict: seat %v is already taken or held", ticket.IdSeat)
 		}
 
-		return uuid.Nil, fmt.Errorf("Error creating the ticket: %v", err)
+		return models.Ticket{}, fmt.Errorf("Error creating the ticket: %v", err)
 	}
 
-	return ticket.Id, nil
+	return ticket, nil
 }
 
-func (s *Store) UpdateTicketStatus(status string, id uuid.UUID) (Ticket, error) {
+func (s *Store) UpdateTicketStatus(status string, id uuid.UUID) (models.Ticket, error) {
 	pool := s.db.GetDB()
 
-	var updatedTicket Ticket
+	var updatedTicket models.Ticket
 
 	query := `
 		UPDATE tickets SET status = $1
@@ -62,7 +63,7 @@ func (s *Store) UpdateTicketStatus(status string, id uuid.UUID) (Ticket, error) 
 	err := pool.QueryRow(context.Background(), query, status, id).Scan(&updatedTicket.Id, &updatedTicket.IdUser, &updatedTicket.IdShowtime, &updatedTicket.Status, &updatedTicket.IdSeat)
 
 	if err != nil {
-		return Ticket{}, fmt.Errorf("Error updating the ticket status: %v", err)
+		return models.Ticket{}, fmt.Errorf("Error updating the ticket status: %v", err)
 	}
 
 	return updatedTicket, nil

@@ -3,6 +3,7 @@ package movie
 import (
 	"encoding/json"
 	"net/http"
+	"start/internal/models"
 	"start/internal/response"
 	"strconv"
 )
@@ -45,7 +46,7 @@ func (h *Handler) GetMovies(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *Handler) InsertMovie(w http.ResponseWriter, r *http.Request) {
-	var movie Movie
+	var movie models.Movie
 	err := json.NewDecoder(r.Body).Decode(&movie)
 	if err != nil {
 		response.Error(w, http.StatusBadRequest, err.Error())

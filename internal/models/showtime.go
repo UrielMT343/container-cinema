@@ -1,4 +1,4 @@
-package showtime
+package models
 
 import "time"
 

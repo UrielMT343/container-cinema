@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"start/internal/database"
+	"start/internal/models"
 )
 
 type Store struct {
@@ -14,8 +15,8 @@ func New(s *database.Service) *Store {
 	return &Store{db: s}
 }
 
-func (s *Store) GetAllSeats() ([]Seat, error) {
-	seats, err := database.QueryRows[Seat](s.db, context.Background(), "SELECT * FROM seats")
+func (s *Store) GetAllSeats() ([]models.Seat, error) {
+	seats, err := database.QueryRows[models.Seat](s.db, context.Background(), "SELECT * FROM seats")
 	if err != nil {
 		return nil, fmt.Errorf("Error while getting all seats: %v", err)
 	}
@@ -23,7 +24,7 @@ func (s *Store) GetAllSeats() ([]Seat, error) {
 	return seats, nil
 }
 
-func (s *Store) CreateSeat(seat Seat) (int, error) {
+func (s *Store) CreateSeat(seat models.Seat) (int, error) {
 	pool := s.db.GetDB()
 
 	if err := seat.Validate(); err != nil {
@@ -45,13 +46,13 @@ func (s *Store) CreateSeat(seat Seat) (int, error) {
 	return seat.Id, nil
 }
 
-func (s *Store) GetSeatsByAuditorium(idAuditorium int) ([]Seat, error) {
+func (s *Store) GetSeatsByAuditorium(idAuditorium int) ([]models.Seat, error) {
 	query := `
 		SELECT * FROM seats
 		WHERE id_auditorium = $1
 	`
 
-	seats, err := database.QueryRows[Seat](s.db, context.Background(), query, idAuditorium)
+	seats, err := database.QueryRows[models.Seat](s.db, context.Background(), query, idAuditorium)
 	if err != nil {
 		return nil, fmt.Errorf("Error while obtaining the seats: %v", err)
 	}

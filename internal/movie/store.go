@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"start/internal/database"
+	"start/internal/models"
 )
 
 type Store struct {
@@ -11,9 +12,9 @@ type Store struct {
 }
 
 type MoviePage struct {
-	Data       []Movie `json:"movies"`
-	TotalRows  int     `json:"total_rows"`
-	TotalPages int     `json:"total_pages"`
+	Data       []models.Movie `json:"movies"`
+	TotalRows  int            `json:"total_rows"`
+	TotalPages int            `json:"total_pages"`
 }
 
 func New(s *database.Service) *Store {
@@ -27,7 +28,7 @@ func (s *Store) GetAllMovies(limit int, offset int) (MoviePage, error) {
 		OFFSET $2
 	`
 
-	movies, err := database.QueryRows[Movie](s.db, context.Background(), query, limit, offset)
+	movies, err := database.QueryRows[models.Movie](s.db, context.Background(), query, limit, offset)
 	if err != nil {
 		return MoviePage{}, fmt.Errorf("Error while running the query: %v", err)
 	}
@@ -55,7 +56,7 @@ func (s *Store) GetAllMovies(limit int, offset int) (MoviePage, error) {
 	return moviePage, nil
 }
 
-func (s *Store) CreateMovie(m Movie) (int, error) {
+func (s *Store) CreateMovie(m models.Movie) (int, error) {
 	pool := s.db.GetDB()
 
 	query := `

@@ -10,13 +10,6 @@ type RabbitMQ struct {
 	queue *amqp.Connection
 }
 
-type TicketData struct {
-	IdUser     int    `json:"idUser"`
-	IdShowtime int    `json:"idShowtime"`
-	Status     string `json:"status"`
-	IdSeat     int    `json:"idSeat"`
-}
-
 func Connect(connString string) (*RabbitMQ, error) {
 	conn, err := amqp.Dial(connString)
 	if err != nil {

@@ -34,6 +34,7 @@ services:
   rabbitmq:
     image: rabbitmq:${RABBITMQ_VERSION}
     container_name: rabbitmq
+    restart: always
     ports:
       - "${AMQP_PORT}:5672"
       - "${MANAGEMENT_UI_PORT}:15672"

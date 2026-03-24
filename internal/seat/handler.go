@@ -3,6 +3,7 @@ package seat
 import (
 	"encoding/json"
 	"net/http"
+	"start/internal/models"
 	"start/internal/response"
 	"strconv"
 )
@@ -26,7 +27,7 @@ func (h *Hander) GetSeats(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *Hander) InsertSeat(w http.ResponseWriter, r *http.Request) {
-	var seat Seat
+	var seat models.Seat
 	err := json.NewDecoder(r.Body).Decode(&seat)
 	if err != nil {
 		response.Error(w, http.StatusBadRequest, err.Error())

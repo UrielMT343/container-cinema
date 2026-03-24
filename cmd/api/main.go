@@ -26,7 +26,7 @@ func main() {
 	)
 	service, err := database.NewConnection(context.Background(), url)
 	if err != nil {
-		fmt.Println("Error", err)
+		fmt.Println("Error:", err)
 		os.Exit(1)
 	}
 
@@ -44,7 +44,7 @@ func main() {
 
 	queue, err := rabbitmq.Connect(rabbitUrl)
 	if err != nil {
-		fmt.Println("Error", err)
+		fmt.Println("Error:", err)
 		os.Exit(1)
 	}
 
@@ -69,7 +69,7 @@ func main() {
 
 	hanlder := routes(cfg)
 
-	go queue.ConsumeTicket()
+	go queue.ConsumeTicket(ticketStore.CreateTicket)
 
 	fmt.Println("Server is up and running!!!")
 	http.ListenAndServe(":8080", hanlder)

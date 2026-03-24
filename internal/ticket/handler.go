@@ -4,6 +4,8 @@ import (
 	"encoding/json"
 	"errors"
 	"net/http"
+
+	"start/internal/models"
 	"start/internal/rabbitmq"
 	"start/internal/response"
 
@@ -50,17 +52,16 @@ func (h *Handler) HoldTicket(w http.ResponseWriter, r *http.Request) {
 
 	var newUuid uuid.UUID = uuid.New()
 	var status string = "HOLD"
-	var ticket Ticket = Ticket{Id: newUuid, IdUser: reqTicket.IdUser, IdShowtime: reqTicket.IdShowtime, Status: status, IdSeat: reqTicket.IdSeat}
+	var ticket models.Ticket = models.Ticket{Id: newUuid, IdUser: reqTicket.IdUser, IdShowtime: reqTicket.IdShowtime, Status: status, IdSeat: reqTicket.IdSeat}
 
-	id, err := h.store.CreateTicket(ticket)
-	if err != nil {
-		response.Error(w, http.StatusInternalServerError, err.Error())
-		return
+	body, err := json.Marshal(ticket)
+
+	errPublish := h.queue.PublishTicket(body)
+	if errPublish != nil {
+		response.Error(w, http.StatusInternalServerError, errPublish.Error())
 	}
 
-	ticket.Id = id
-
-	response.Respond(w, http.StatusCreated, ticket)
+	response.Respond(w, http.StatusAccepted, ticket)
 }
 
 func (h *Handler) CancelTicket(w http.ResponseWriter, r *http.Request) {
