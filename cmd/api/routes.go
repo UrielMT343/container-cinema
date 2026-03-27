@@ -23,6 +23,7 @@ func routes(c *Config) http.Handler {
 	mux.HandleFunc("GET /seats", c.seatHandler.GetSeats)
 	mux.HandleFunc("POST /seats", c.seatHandler.InsertSeat)
 	mux.HandleFunc("GET /seats/auditorium/{id}", c.seatHandler.GetSeatsByAuditorium)
+	mux.HandleFunc("GET /seats/showtime/{id}", c.seatHandler.GetSeatsByShowtime)
 
 	mux.HandleFunc("GET /showtimes", c.showtimeHanlder.GetShowtimes)
 	mux.HandleFunc("GET /showtimes/{id}", c.showtimeHanlder.GetShowtimesById)

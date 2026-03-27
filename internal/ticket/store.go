@@ -75,6 +75,7 @@ func (s *Store) DeleteTicket(id uuid.UUID) error {
 	query := `
 		DELETE FROM tickets
 		WHERE id = $1
+		AND status = 'HOLD'
 	`
 
 	tag, err := pool.Exec(context.Background(), query, id)

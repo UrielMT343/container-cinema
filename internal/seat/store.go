@@ -16,7 +16,11 @@ func New(s *database.Service) *Store {
 }
 
 func (s *Store) GetAllSeats() ([]models.Seat, error) {
-	seats, err := database.QueryRows[models.Seat](s.db, context.Background(), "SELECT * FROM seats")
+	query := `
+		SELECT * FROM seats
+	`
+
+	seats, err := database.QueryRows[models.Seat](s.db, context.Background(), query)
 	if err != nil {
 		return nil, fmt.Errorf("Error while getting all seats: %v", err)
 	}
@@ -53,6 +57,25 @@ func (s *Store) GetSeatsByAuditorium(idAuditorium int) ([]models.Seat, error) {
 	`
 
 	seats, err := database.QueryRows[models.Seat](s.db, context.Background(), query, idAuditorium)
+	if err != nil {
+		return nil, fmt.Errorf("Error while obtaining the seats: %v", err)
+	}
+	return seats, nil
+}
+
+func (s *Store) GetSeatsByShowtime(idShowtime int) ([]models.ShowtimeSeat, error) {
+	query := `
+		SELECT
+		    s.id AS id,
+		    s.number AS number,
+		    COALESCE(t.status, 'AVAILABLE') AS status
+		FROM showtimes st
+		JOIN seats s ON st.id_auditorium = s.id_auditorium
+		LEFT JOIN tickets t ON s.id = t.id_seat AND t.id_showtime = st.id
+		WHERE st.id = $1;
+	`
+
+	seats, err := database.QueryRows[models.ShowtimeSeat](s.db, context.Background(), query, idShowtime)
 	if err != nil {
 		return nil, fmt.Errorf("Error while obtaining the seats: %v", err)
 	}

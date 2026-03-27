@@ -2,18 +2,22 @@ package seat
 
 import (
 	"encoding/json"
+	"errors"
 	"net/http"
+	"start/internal/config"
 	"start/internal/models"
+	redisClient "start/internal/redis"
 	"start/internal/response"
 	"strconv"
 )
 
 type Hander struct {
 	store *Store
+	redis *redisClient.Redis
 }
 
-func NewHandler(s *Store) *Hander {
-	return &Hander{store: s}
+func NewHandler(s *Store, r *redisClient.Redis) *Hander {
+	return &Hander{store: s, redis: r}
 }
 
 func (h *Hander) GetSeats(w http.ResponseWriter, r *http.Request) {
@@ -50,6 +54,7 @@ func (h *Hander) GetSeatsByAuditorium(w http.ResponseWriter, r *http.Request) {
 	id, err := strconv.Atoi(idStr)
 	if err != nil {
 		response.Error(w, http.StatusBadRequest, "Invalid auditorium")
+		return
 	}
 
 	seats, err := h.store.GetSeatsByAuditorium(id)
@@ -59,4 +64,40 @@ func (h *Hander) GetSeatsByAuditorium(w http.ResponseWriter, r *http.Request) {
 	}
 
 	response.Respond(w, http.StatusOK, seats)
+}
+
+func (h *Hander) GetSeatsByShowtime(w http.ResponseWriter, r *http.Request) {
+	idStr := r.PathValue("id")
+	id, err := strconv.Atoi(idStr)
+	if err != nil {
+		response.Error(w, http.StatusBadRequest, "Invalid showtime")
+		return
+	}
+
+	showtimeKey := h.redis.BuildShowtimeSeatsKey(id)
+
+	val, err := h.redis.GetCache(showtimeKey)
+
+	if errors.Is(err, redisClient.ErrCacheNotFound) {
+		seats, err := h.store.GetSeatsByShowtime(id)
+		if err != nil {
+			response.Error(w, http.StatusInternalServerError, err.Error())
+			return
+		}
+
+		ttl := config.CacheTTLMinutes
+
+		errSetCache := h.redis.SetCache(showtimeKey, seats, ttl)
+		if errSetCache != nil {
+			response.Error(w, http.StatusInternalServerError, errSetCache.Error())
+			return
+		}
+
+		response.Respond(w, http.StatusOK, seats)
+	} else if err != nil {
+		response.Error(w, http.StatusInternalServerError, err.Error())
+		return
+	} else {
+		response.Respond(w, http.StatusOK, json.RawMessage([]byte(val)))
+	}
 }

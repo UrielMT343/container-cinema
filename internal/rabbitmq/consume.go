@@ -4,11 +4,12 @@ import (
 	"encoding/json"
 	"fmt"
 	"start/internal/models"
+	redisClient "start/internal/redis"
 
 	amqp "github.com/rabbitmq/amqp091-go"
 )
 
-func (q *RabbitMQ) ConsumeTicket(insertTicketToDB func(ticket models.Ticket) (models.Ticket, error)) {
+func (q *RabbitMQ) ConsumeTicket(insertTicketToDB func(ticket models.Ticket) (models.Ticket, error), rdb *redisClient.Redis) {
 	ch, err := q.NewChannel()
 	if err != nil {
 		return
@@ -42,6 +43,13 @@ func (q *RabbitMQ) ConsumeTicket(insertTicketToDB func(ticket models.Ticket) (mo
 				fmt.Printf("Error inserting ticket to DB: %s\n", err.Error())
 				m.Nack(false, true)
 				continue
+			}
+
+			showtimeKey := fmt.Sprintf("seats:showtime:%v", ticket.IdShowtime)
+
+			errDelete := rdb.DeleteKey(showtimeKey)
+			if errDelete != nil {
+				fmt.Println("Warning: Failed to clear cache for", showtimeKey)
 			}
 
 			fmt.Println("Ticket successfully processed!", createdTicket.Id)
