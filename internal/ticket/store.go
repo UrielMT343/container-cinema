@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+
 	"start/internal/database"
 	"start/internal/models"
 
@@ -36,15 +37,14 @@ func (s *Store) CreateTicket(ticket models.Ticket) (models.Ticket, error) {
 		`
 
 	err := pool.QueryRow(context.Background(), query,
-		ticket.Id, ticket.IdUser, ticket.IdShowtime, ticket.Status, ticket.IdSeat,
-	).Scan(&ticket.Id)
-
+		ticket.ID, ticket.IDUser, ticket.IDShowtime, ticket.Status, ticket.IDSeat,
+	).Scan(&ticket.ID)
 	if err != nil {
 		if err.Error() == "no rows in result set" {
-			return models.Ticket{}, fmt.Errorf("Conflict: seat %v is already taken or held", ticket.IdSeat)
+			return models.Ticket{}, fmt.Errorf("conflict: seat %v is already taken or held", ticket.IDSeat)
 		}
 
-		return models.Ticket{}, fmt.Errorf("Error creating the ticket: %v", err)
+		return models.Ticket{}, fmt.Errorf("error creating the ticket: %v", err)
 	}
 
 	return ticket, nil
@@ -60,10 +60,9 @@ func (s *Store) UpdateTicketStatus(status string, id uuid.UUID) (models.Ticket, 
 		WHERE id = $2
 		RETURNING id, id_user, id_showtime, status, id_seat
 	`
-	err := pool.QueryRow(context.Background(), query, status, id).Scan(&updatedTicket.Id, &updatedTicket.IdUser, &updatedTicket.IdShowtime, &updatedTicket.Status, &updatedTicket.IdSeat)
-
+	err := pool.QueryRow(context.Background(), query, status, id).Scan(&updatedTicket.ID, &updatedTicket.IDUser, &updatedTicket.IDShowtime, &updatedTicket.Status, &updatedTicket.IDSeat)
 	if err != nil {
-		return models.Ticket{}, fmt.Errorf("Error updating the ticket status: %v", err)
+		return models.Ticket{}, fmt.Errorf("error updating the ticket status: %v", err)
 	}
 
 	return updatedTicket, nil
@@ -80,7 +79,7 @@ func (s *Store) DeleteTicket(id uuid.UUID) error {
 
 	tag, err := pool.Exec(context.Background(), query, id)
 	if err != nil {
-		return fmt.Errorf("Error deleting the ticket: %v", err)
+		return fmt.Errorf("error deleting the ticket: %v", err)
 	}
 
 	rows := tag.RowsAffected()

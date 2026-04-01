@@ -1,4 +1,4 @@
-package redisClient
+package redisclient
 
 import (
 	"context"
@@ -9,7 +9,7 @@ import (
 	"github.com/redis/go-redis/v9"
 )
 
-var ErrCacheNotFound = errors.New("Data not found")
+var ErrCacheNotFound = errors.New("data not found")
 
 func (client *Redis) GetCache(key string) (string, error) {
 	val, err := client.Client.Get(context.Background(), key).Result()

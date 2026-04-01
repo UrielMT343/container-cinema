@@ -1,20 +1,29 @@
 package models
 
-import "errors"
+import (
+	"errors"
+	"strings"
+)
 
 type Seat struct {
-	Id           int    `db:"id" json:"id"`
+	ID           int    `db:"id" json:"id"`
 	Number       string `db:"number" json:"number"`
-	IdAuditorium int    `db:"id_auditorium" json:"idAuditorium"`
+	IDAuditorium int    `db:"id_auditorium" json:"idAuditorium"`
 }
 
 func (s *Seat) Validate() error {
+	var errs []string
 	if s.Number == "" {
-		return errors.New("The seat number cannot be empty")
+		errs = append(errs, "the seat number cannot be empty")
 	}
-	if s.IdAuditorium <= 0 {
-		return errors.New("The auditorium Id is required")
+	if s.IDAuditorium <= 0 {
+		errs = append(errs, "the auditorium Id is required")
 	}
+
+	if len(errs) > 0 {
+		return errors.New(strings.Join(errs, "; "))
+	}
+
 	return nil
 }
 

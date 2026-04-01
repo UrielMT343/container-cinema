@@ -78,3 +78,8 @@ ON UPDATE NO ACTION ON DELETE NO ACTION;
 ALTER TABLE "tickets"
 ADD FOREIGN KEY("id_showtime") REFERENCES "showtimes"("id")
 ON UPDATE NO ACTION ON DELETE NO ACTION;
+
+-- Tickets should have a unique showtime and seat
+ALTER TABLE "tickets" 
+ADD CONSTRAINT unique_showtime_seat 
+UNIQUE ("id_showtime", "id_seat");

@@ -3,6 +3,7 @@ package movie
 import (
 	"context"
 	"fmt"
+
 	"start/internal/database"
 	"start/internal/models"
 )
@@ -30,7 +31,7 @@ func (s *Store) GetAllMovies(limit int, offset int) (MoviePage, error) {
 
 	movies, err := database.QueryRows[models.Movie](s.db, context.Background(), query, limit, offset)
 	if err != nil {
-		return MoviePage{}, fmt.Errorf("Error while running the query: %v", err)
+		return MoviePage{}, fmt.Errorf("error while running the query: %v", err)
 	}
 
 	pool := s.db.GetDB()
@@ -42,7 +43,7 @@ func (s *Store) GetAllMovies(limit int, offset int) (MoviePage, error) {
 	var count int
 	errScan := pool.QueryRow(context.Background(), countQuery).Scan(&count)
 	if errScan != nil {
-		return MoviePage{}, fmt.Errorf("Error while counting the rows: %v", errScan)
+		return MoviePage{}, fmt.Errorf("error while counting the rows: %v", errScan)
 	}
 
 	totalPages := count / limit
@@ -51,7 +52,7 @@ func (s *Store) GetAllMovies(limit int, offset int) (MoviePage, error) {
 		totalPages += 1
 	}
 
-	var moviePage MoviePage = MoviePage{Data: movies, TotalRows: count, TotalPages: totalPages}
+	moviePage := MoviePage{Data: movies, TotalRows: count, TotalPages: totalPages}
 
 	return moviePage, nil
 }
@@ -65,11 +66,10 @@ func (s *Store) CreateMovie(m models.Movie) (int, error) {
 		RETURNING id
 	`
 
-	err := pool.QueryRow(context.Background(), query, m.Name, m.DurationMin, m.Synopsis).Scan(&m.Id)
-
+	err := pool.QueryRow(context.Background(), query, m.Name, m.DurationMin, m.Synopsis).Scan(&m.ID)
 	if err != nil {
-		return 0, fmt.Errorf("Error while running the query: %v", err)
+		return 0, fmt.Errorf("error while running the query: %v", err)
 	}
 
-	return m.Id, nil
+	return m.ID, nil
 }

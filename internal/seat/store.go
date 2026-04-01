@@ -3,6 +3,7 @@ package seat
 import (
 	"context"
 	"fmt"
+
 	"start/internal/database"
 	"start/internal/models"
 )
@@ -22,7 +23,7 @@ func (s *Store) GetAllSeats() ([]models.Seat, error) {
 
 	seats, err := database.QueryRows[models.Seat](s.db, context.Background(), query)
 	if err != nil {
-		return nil, fmt.Errorf("Error while getting all seats: %v", err)
+		return nil, fmt.Errorf("error while getting all seats: %v", err)
 	}
 
 	return seats, nil
@@ -41,13 +42,12 @@ func (s *Store) CreateSeat(seat models.Seat) (int, error) {
 		RETURNING id
 	`
 
-	err := pool.QueryRow(context.Background(), query, seat.Number, seat.IdAuditorium).Scan(&seat.Id)
-
+	err := pool.QueryRow(context.Background(), query, seat.Number, seat.IDAuditorium).Scan(&seat.ID)
 	if err != nil {
-		return 0, fmt.Errorf("Error while creating the seat: %v", err)
+		return 0, fmt.Errorf("error while creating the seat: %v", err)
 	}
 
-	return seat.Id, nil
+	return seat.ID, nil
 }
 
 func (s *Store) GetSeatsByAuditorium(idAuditorium int) ([]models.Seat, error) {
@@ -58,7 +58,7 @@ func (s *Store) GetSeatsByAuditorium(idAuditorium int) ([]models.Seat, error) {
 
 	seats, err := database.QueryRows[models.Seat](s.db, context.Background(), query, idAuditorium)
 	if err != nil {
-		return nil, fmt.Errorf("Error while obtaining the seats: %v", err)
+		return nil, fmt.Errorf("error while obtaining the seats: %v", err)
 	}
 	return seats, nil
 }
@@ -77,7 +77,7 @@ func (s *Store) GetSeatsByShowtime(idShowtime int) ([]models.ShowtimeSeat, error
 
 	seats, err := database.QueryRows[models.ShowtimeSeat](s.db, context.Background(), query, idShowtime)
 	if err != nil {
-		return nil, fmt.Errorf("Error while obtaining the seats: %v", err)
+		return nil, fmt.Errorf("error while obtaining the seats: %v", err)
 	}
 	return seats, nil
 }

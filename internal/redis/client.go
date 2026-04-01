@@ -1,4 +1,4 @@
-package redisClient
+package redisclient
 
 import (
 	"context"
@@ -14,14 +14,14 @@ type Redis struct {
 func Connect(connString string) (*Redis, error) {
 	opt, err := redis.ParseURL(connString)
 	if err != nil {
-		return nil, fmt.Errorf("Failed to connect to Redis")
+		return nil, fmt.Errorf("failed to connect to Redis")
 	}
 
 	client := redis.NewClient(opt)
 
 	pong, err := client.Ping(context.Background()).Result()
 	if err != nil {
-		return nil, fmt.Errorf("Error: %v", err)
+		return nil, fmt.Errorf("error: %v", err)
 	}
 
 	fmt.Println(pong)

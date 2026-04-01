@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"fmt"
+	"log/slog"
 	"net/http"
 	"os"
 	"strconv"
@@ -11,8 +12,7 @@ import (
 	"start/internal/database"
 	"start/internal/movie"
 	"start/internal/rabbitmq"
-	redisClient "start/internal/redis"
-
+	redisclient "start/internal/redis"
 	"start/internal/seat"
 	"start/internal/showtime"
 	"start/internal/ticket"
@@ -21,6 +21,11 @@ import (
 )
 
 func main() {
+	logger := slog.New(slog.NewJSONHandler(os.Stdout, nil))
+	slog.SetDefault(logger)
+
+	slog.Info("Starting Cloud Cinema API", "version", "1.0.0", "env", "testing")
+
 	user := os.Getenv("POSTGRES_USER")
 	pass := os.Getenv("POSTGRES_PASSWORD")
 	host := os.Getenv("DATABASE_HOST")
@@ -32,7 +37,7 @@ func main() {
 	)
 	service, err := database.NewConnection(context.Background(), url)
 	if err != nil {
-		fmt.Println("Error:", err)
+		slog.Error("Critical startup error", "error", err)
 		os.Exit(1)
 	}
 
@@ -41,16 +46,16 @@ func main() {
 	rabbitHost := os.Getenv("RABBITMQ_HOST")
 	rabbitPort := os.Getenv("AMQP_PORT")
 
-	rabbitUrl := fmt.Sprintf("amqp://%s:%s@%s:%s/",
+	rabbitURL := fmt.Sprintf("amqp://%s:%s@%s:%s/",
 		rabbitUser,
 		rabbitPass,
 		rabbitHost,
 		rabbitPort,
 	)
 
-	queue, err := rabbitmq.Connect(rabbitUrl)
+	queue, err := rabbitmq.Connect(rabbitURL)
 	if err != nil {
-		fmt.Println("Error:", err)
+		slog.Error("Critical startup error", "error", err)
 		os.Exit(1)
 	}
 
@@ -58,19 +63,19 @@ func main() {
 	redisPassword := os.Getenv("REDIS_PASSWORD")
 	redisHost := os.Getenv("REDIS_HOST")
 	redisPort := os.Getenv("REDIS_PORT")
-	redisDb := os.Getenv("REDIS_DB")
+	redisDB := os.Getenv("REDIS_DB")
 
-	redisUrl := fmt.Sprintf("redis://%s:%s@%s:%s/%s",
+	redisURL := fmt.Sprintf("redis://%s:%s@%s:%s/%s",
 		redisUser,
 		redisPassword,
 		redisHost,
 		redisPort,
-		redisDb,
+		redisDB,
 	)
 
-	rdb, err := redisClient.Connect(redisUrl)
+	rdb, err := redisclient.Connect(redisURL)
 	if err != nil {
-		fmt.Println("Error:", err)
+		slog.Error("Critical startup error", "error", err)
 		os.Exit(1)
 	}
 
@@ -100,29 +105,29 @@ func main() {
 	go rdb.ListenForTicketExpirations(func(expiredKey string) {
 		parts := strings.Split(expiredKey, ":")
 		if len(parts) != 4 {
-			fmt.Println("Warning: Unknown key format expired:", expiredKey)
+			slog.Warn("Unknown key format expired:", "expiredKey", expiredKey)
 			return
 		}
 
-		showtimeIdStr := parts[2]
-		ticketIdStr := parts[3]
+		showtimeIDStr := parts[2]
+		ticketIDStr := parts[3]
 
-		ticketUUID, err := uuid.Parse(ticketIdStr)
+		ticketUUID, err := uuid.Parse(ticketIDStr)
 		if err != nil {
-			fmt.Println("Error:", err)
+			slog.Error("Failed to parse the ticket", "ticket", ticketIDStr)
 			return
 		}
 
 		errDeleteTicket := ticketStore.DeleteTicket(ticketUUID)
 		if errDeleteTicket != nil {
-			fmt.Println("Error:", errDeleteTicket)
+			slog.Error("Failed to delete the ticket", "ticket", ticketUUID)
 			return
 		}
-		fmt.Println("Ticket deleted for timeout:", ticketIdStr)
+		slog.Info("Ticket deleted by timeout", "ticket", ticketIDStr)
 
-		idShowtime, err := strconv.Atoi(showtimeIdStr)
+		idShowtime, err := strconv.Atoi(showtimeIDStr)
 		if err != nil {
-			fmt.Println("Error:", err)
+			slog.Error("Failed to cast showtime ID to string", "showtimeID", showtimeIDStr)
 			return
 		}
 
@@ -130,10 +135,14 @@ func main() {
 
 		errDeleteKey := rdb.DeleteKey(cacheShowtimeKey)
 		if errDeleteKey != nil {
-			fmt.Printf("WARNING: Failed to invalidate cache for %s: %v\n", cacheShowtimeKey, errDeleteKey)
+			slog.Warn("Failed to invalidate cache", "showtimeKey", cacheShowtimeKey, "error", errDeleteKey)
 		}
 	})
 
-	fmt.Println("Server is up and running!!!")
-	http.ListenAndServe(":8080", hanlder)
+	slog.Info("Server started", "Port", 8080)
+	errServer := http.ListenAndServe(":8080", hanlder)
+	if errServer != nil {
+		slog.Error("Critical startup Error", "error", errServer)
+		os.Exit(1)
+	}
 }

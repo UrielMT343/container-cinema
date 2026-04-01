@@ -3,6 +3,7 @@ package showtime
 import (
 	"context"
 	"fmt"
+
 	"start/internal/database"
 	"start/internal/models"
 )
@@ -22,13 +23,13 @@ func (s *Store) GetAllShowtimes() ([]models.Showtime, error) {
 
 	showtimes, err := database.QueryRows[models.Showtime](s.db, context.Background(), query)
 	if err != nil {
-		return nil, fmt.Errorf("Error while getting the showtimes: %v", err)
+		return nil, fmt.Errorf("error while getting the showtimes: %v", err)
 	}
 
 	return showtimes, nil
 }
 
-func (s *Store) GetShowtimeById(id int) (models.Showtime, error) {
+func (s *Store) GetShowtimeByID(id int) (models.Showtime, error) {
 	pool := s.db.GetDB()
 
 	query := `
@@ -37,9 +38,9 @@ func (s *Store) GetShowtimeById(id int) (models.Showtime, error) {
 	`
 
 	var showtime models.Showtime
-	err := pool.QueryRow(context.Background(), query, id).Scan(&showtime.Id, &showtime.IdMovie, &showtime.IdAuditorium, &showtime.StartTime)
+	err := pool.QueryRow(context.Background(), query, id).Scan(&showtime.ID, &showtime.IDMovie, &showtime.IDAuditorium, &showtime.StartTime)
 	if err != nil {
-		return models.Showtime{}, fmt.Errorf("No showtime founded: %v", err)
+		return models.Showtime{}, fmt.Errorf("no showtime founded: %v", err)
 	}
 
 	return showtime, nil

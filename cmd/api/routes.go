@@ -2,6 +2,7 @@ package main
 
 import (
 	"net/http"
+
 	"start/internal/movie"
 	"start/internal/seat"
 	"start/internal/showtime"
@@ -26,7 +27,7 @@ func routes(c *Config) http.Handler {
 	mux.HandleFunc("GET /seats/showtime/{id}", c.seatHandler.GetSeatsByShowtime)
 
 	mux.HandleFunc("GET /showtimes", c.showtimeHanlder.GetShowtimes)
-	mux.HandleFunc("GET /showtimes/{id}", c.showtimeHanlder.GetShowtimesById)
+	mux.HandleFunc("GET /showtimes/{id}", c.showtimeHanlder.GetShowtimesByID)
 
 	mux.HandleFunc("POST /ticket", c.ticketHandler.HoldTicket)
 	mux.HandleFunc("PATCH /ticket/{id}/pay", c.ticketHandler.ConfirmTicket)

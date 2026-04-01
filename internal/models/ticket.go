@@ -1,11 +1,45 @@
 package models
 
-import "github.com/google/uuid"
+import (
+	"errors"
+	"strings"
+
+	"github.com/google/uuid"
+)
 
 type Ticket struct {
-	Id         uuid.UUID `db:"id" json:"id"`
-	IdUser     int       `db:"id_user" json:"idUser"`
-	IdShowtime int       `db:"id_showtime" json:"idShowtime"`
+	ID         uuid.UUID `db:"id" json:"id"`
+	IDUser     int       `db:"id_user" json:"idUser"`
+	IDShowtime int       `db:"id_showtime" json:"idShowtime"`
 	Status     string    `db:"status" json:"status"`
-	IdSeat     int       `db:"is_seat" json:"idSeat"`
+	IDSeat     int       `db:"is_seat" json:"idSeat"`
+}
+
+func (t *Ticket) Validate() error {
+	var errs []string
+
+	if t.ID == uuid.Nil {
+		errs = append(errs, "the ticket ID is required")
+	}
+	if t.IDUser <= 0 {
+		errs = append(errs, "the user is required")
+	}
+
+	if t.IDShowtime <= 0 {
+		errs = append(errs, "the showtime is required")
+	}
+
+	if t.Status == "" {
+		errs = append(errs, "the status must not be empty")
+	}
+
+	if t.IDSeat <= 0 {
+		errs = append(errs, "the seat is required")
+	}
+
+	if len(errs) > 0 {
+		return errors.New(strings.Join(errs, "; "))
+	}
+
+	return nil
 }

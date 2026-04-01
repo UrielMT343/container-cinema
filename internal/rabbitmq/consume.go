@@ -3,13 +3,15 @@ package rabbitmq
 import (
 	"encoding/json"
 	"fmt"
+	"log/slog"
+
 	"start/internal/models"
-	redisClient "start/internal/redis"
+	redisclient "start/internal/redis"
 
 	amqp "github.com/rabbitmq/amqp091-go"
 )
 
-func (q *RabbitMQ) ConsumeTicket(insertTicketToDB func(ticket models.Ticket) (models.Ticket, error), rdb *redisClient.Redis) {
+func (q *RabbitMQ) ConsumeTicket(insertTicketToDB func(ticket models.Ticket) (models.Ticket, error), rdb *redisclient.Redis) {
 	ch, err := q.NewChannel()
 	if err != nil {
 		return
@@ -21,42 +23,55 @@ func (q *RabbitMQ) ConsumeTicket(insertTicketToDB func(ticket models.Ticket) (mo
 	}
 
 	msgs, err := ch.Consume(qd.Name, "", false, false, false, false, nil)
+	if err != nil {
+		return
+	}
 
 	listening := make(chan struct{})
 
 	go func() {
 		for m := range msgs {
-			fmt.Println("Message received: ", string(m.Body))
+			slog.Info("Message received", "body", m.Body)
 
 			var ticket models.Ticket
 
 			err := json.Unmarshal(m.Body, &ticket)
 			if err != nil {
-				fmt.Printf("Error while formating the JSON: %s\n", err.Error())
-				m.Nack(false, false)
+				slog.Error("Error while formating the JSON", "error", err)
+				errNack := m.Nack(false, false)
+				if errNack != nil {
+					continue
+				}
+
 				continue
 			}
 
 			createdTicket, err := insertTicketToDB(ticket)
-
 			if err != nil {
-				fmt.Printf("Error inserting ticket to DB: %s\n", err.Error())
-				m.Nack(false, true)
+				slog.Error("Error inserting ticket to DB:", "error", err)
+				errNack := m.Nack(false, true)
+				if errNack != nil {
+					continue
+				}
+
 				continue
 			}
 
-			showtimeKey := fmt.Sprintf("seats:showtime:%v", ticket.IdShowtime)
+			showtimeKey := fmt.Sprintf("seats:showtime:%v", ticket.IDShowtime)
 
 			errDelete := rdb.DeleteKey(showtimeKey)
 			if errDelete != nil {
-				fmt.Println("Warning: Failed to clear cache for", showtimeKey)
+				slog.Warn("Failed to clear cache", "key", showtimeKey)
 			}
 
-			fmt.Println("Ticket successfully processed!", createdTicket.Id)
-			m.Ack(false)
+			slog.Info("Ticket successfully processed", "ticket", createdTicket.ID)
+			errAck := m.Ack(false)
+			if errAck != nil {
+				continue
+			}
 		}
 	}()
 
-	fmt.Println("Waiting for messages. Exit by pressing CTRL + C")
+	slog.Info("Waiting for messages")
 	<-listening
 }

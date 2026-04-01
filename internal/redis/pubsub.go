@@ -1,4 +1,4 @@
-package redisClient
+package redisclient
 
 import (
 	"context"

@@ -1,23 +1,33 @@
 package models
 
-import "errors"
+import (
+	"errors"
+	"strings"
+)
 
 type Movie struct {
-	Id          int    `db:"id" json:"id"`
+	ID          int    `db:"id" json:"id"`
 	Name        string `db:"name" json:"name"`
 	DurationMin int    `db:"duration_min" json:"durationMin"`
 	Synopsis    string `db:"synopsis" json:"synopsis"`
 }
 
 func (m *Movie) Validate() error {
+	var errs []string
+
 	if m.Name == "" {
-		return errors.New("The name must not be empty")
+		errs = append(errs, "the name must not be empty")
 	}
 	if m.DurationMin <= 0 {
-		return errors.New("The duration must be more than 0 minutes")
+		errs = append(errs, "the duration must be more than 0 minutes")
 	}
 	if m.Synopsis == "" {
-		return errors.New("The synopsis must not be empty")
+		errs = append(errs, "the synopsis must not be empty")
 	}
+
+	if len(errs) > 0 {
+		return errors.New(strings.Join(errs, "; "))
+	}
+
 	return nil
 }
