@@ -4,11 +4,13 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"log/slog"
 
 	"start/internal/database"
 	"start/internal/models"
 
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5"
 )
 
 type Store struct {
@@ -21,51 +23,115 @@ func New(s *database.Service) *Store {
 
 var ErrNotFound = errors.New("ticket not found")
 
-func (s *Store) CreateTicket(ticket models.Ticket) (models.Ticket, error) {
-	pool := s.db.GetDB()
-
-	query := `
-			INSERT INTO tickets (id, id_user, id_showtime, status, id_seat)
-			SELECT $1, $2, $3, $4, $5
-			WHERE NOT EXISTS (
-				SELECT 1 FROM tickets
-				WHERE id_showtime = $3
-				AND id_seat = $5
-				AND status IN ('SOLD', 'HELD')
-			)
-			RETURNING id;
-		`
-
-	err := pool.QueryRow(context.Background(), query,
-		ticket.ID, ticket.IDUser, ticket.IDShowtime, ticket.Status, ticket.IDSeat,
-	).Scan(&ticket.ID)
-	if err != nil {
-		if err.Error() == "no rows in result set" {
-			return models.Ticket{}, fmt.Errorf("conflict: seat %v is already taken or held", ticket.IDSeat)
-		}
-
-		return models.Ticket{}, fmt.Errorf("error creating the ticket: %v", err)
+func (s *Store) CreateTicket(ctx context.Context, tickets []models.Ticket) (insertedTickets []models.Ticket, err error) {
+	if len(tickets) == 0 {
+		return nil, nil
 	}
 
-	return ticket, nil
+	pool := s.db.GetDB()
+
+	var ids []uuid.UUID
+	var seatIDs []int
+
+	idUser := tickets[0].IDUser
+	idShowtime := tickets[0].IDShowtime
+	status := tickets[0].Status
+
+	for _, t := range tickets {
+		ids = append(ids, t.ID)
+		seatIDs = append(seatIDs, t.IDSeat)
+	}
+
+	tx, err := pool.BeginTx(ctx, pgx.TxOptions{})
+	if err != nil {
+		return nil, fmt.Errorf("error while beginning transaction: %w", err)
+	}
+
+	defer func() {
+		if err != nil {
+			_ = tx.Rollback(ctx)
+		}
+	}()
+
+	query := `
+		WITH input AS (
+			SELECT unnest($1::uuid[]) AS id, unnest($2::int[]) AS id_seat
+		)
+		INSERT INTO tickets (id, id_user, id_showtime, status, id_seat)
+		SELECT i.id, $3, $4, $5, i.id_seat
+		FROM input i
+		WHERE NOT EXISTS (
+			SELECT 1 FROM tickets t
+			WHERE t.id_showtime = $4
+			AND t.id_seat = ANY($2::int[])
+			AND t.status IN ('SOLD', 'HELD')
+		)
+		RETURNING id;
+	`
+
+	rows, err := tx.Query(ctx, query, ids, seatIDs, idUser, idShowtime, status)
+	if err != nil {
+		return nil, fmt.Errorf("error executing bulk insert: %w", err)
+	}
+	defer rows.Close()
+
+	var insertedCount int
+	for rows.Next() {
+		insertedCount++
+	}
+
+	if insertedCount == 0 {
+		return nil, fmt.Errorf("conflict: one or more seats in %v are already taken or held", seatIDs)
+	}
+
+	errCommit := tx.Commit(ctx)
+	if errCommit != nil {
+		return nil, fmt.Errorf("could not commit transaction, error: %v", errCommit)
+	}
+
+	return tickets, nil
 }
 
-func (s *Store) UpdateTicketStatus(status string, id uuid.UUID) (models.Ticket, error) {
-	pool := s.db.GetDB()
-
-	var updatedTicket models.Ticket
-
-	query := `
-		UPDATE tickets SET status = $1
-		WHERE id = $2
-		RETURNING id, id_user, id_showtime, status, id_seat
-	`
-	err := pool.QueryRow(context.Background(), query, status, id).Scan(&updatedTicket.ID, &updatedTicket.IDUser, &updatedTicket.IDShowtime, &updatedTicket.Status, &updatedTicket.IDSeat)
-	if err != nil {
-		return models.Ticket{}, fmt.Errorf("error updating the ticket status: %v", err)
+func (s *Store) UpdateTicketStatuses(ctx context.Context, status string, ids []uuid.UUID) ([]models.Ticket, error) {
+	if len(ids) == 0 {
+		return nil, nil
 	}
 
-	return updatedTicket, nil
+	pool := s.db.GetDB()
+
+	query := `
+		UPDATE tickets
+		SET status = $1
+		WHERE id = ANY($2::uuid[])
+		RETURNING id, id_user, id_showtime, status, id_seat;
+	`
+
+	rows, err := pool.Query(ctx, query, status, ids)
+	if err != nil {
+		return nil, fmt.Errorf("error executing bulk update: %w", err)
+	}
+	defer rows.Close()
+
+	var updatedTickets []models.Ticket
+
+	for rows.Next() {
+		var t models.Ticket
+		err := rows.Scan(&t.ID, &t.IDUser, &t.IDShowtime, &t.Status, &t.IDSeat)
+		if err != nil {
+			return nil, fmt.Errorf("error scanning updated ticket row: %w", err)
+		}
+		updatedTickets = append(updatedTickets, t)
+	}
+
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("error iterating over updated rows: %w", err)
+	}
+
+	if len(updatedTickets) != len(ids) {
+		slog.Warn("Mismatch in updated tickets", "requested", len(ids), "updated", len(updatedTickets))
+	}
+
+	return updatedTickets, nil
 }
 
 func (s *Store) DeleteTicket(id uuid.UUID) error {

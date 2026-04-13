@@ -13,3 +13,7 @@ func (client *Redis) BuildHoldTicketKey(idTicket uuid.UUID, idShowtime int) stri
 func (client *Redis) BuildShowtimeSeatsKey(idShowtime int) string {
 	return fmt.Sprintf("seats:showtime:%d", idShowtime)
 }
+
+func (client *Redis) BuildCartKey(cartIDstr string) string {
+	return fmt.Sprintf("cart_%s", cartIDstr)
+}

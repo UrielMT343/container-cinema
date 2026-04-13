@@ -16,6 +16,7 @@ import (
 	"start/internal/seat"
 	"start/internal/showtime"
 	"start/internal/ticket"
+	"start/internal/user"
 
 	"github.com/google/uuid"
 )
@@ -26,14 +27,14 @@ func main() {
 
 	slog.Info("Starting Cloud Cinema API", "version", "1.0.0", "env", "testing")
 
-	user := os.Getenv("POSTGRES_USER")
+	pgUser := os.Getenv("POSTGRES_USER")
 	pass := os.Getenv("POSTGRES_PASSWORD")
 	host := os.Getenv("DATABASE_HOST")
 	port := os.Getenv("POSTGRES_PORT")
 	db := os.Getenv("POSTGRES_DB")
 
 	url := fmt.Sprintf("postgres://%s:%s@%s:%s/%s",
-		user, pass, host, port, db,
+		pgUser, pass, host, port, db,
 	)
 	service, err := database.NewConnection(context.Background(), url)
 	if err != nil {
@@ -79,6 +80,8 @@ func main() {
 		os.Exit(1)
 	}
 
+	tokenSecret := os.Getenv("JWT_SECRET")
+
 	movieStore := movie.New(service)
 	movieHandler := movie.NewHandler(movieStore)
 
@@ -91,14 +94,21 @@ func main() {
 	ticketStore := ticket.New(service)
 	ticketHandler := ticket.NewHandler(ticketStore, queue, rdb)
 
+	userStore := user.New(service)
+	userHandler := user.NewHandler(userStore, tokenSecret)
+
 	cfg := &Config{
 		movieHanlder:    movieHandler,
 		seatHandler:     seatHandler,
 		showtimeHanlder: showtimeHandler,
 		ticketHandler:   ticketHandler,
+		userHandler:     userHandler,
 	}
 
-	hanlder := routes(cfg)
+	apiVersion := os.Getenv("API_VERSION")
+	basePrefix := fmt.Sprintf("/api/%s", apiVersion)
+
+	handler := routes(cfg, basePrefix, tokenSecret)
 
 	go queue.ConsumeTicket(ticketStore.CreateTicket, rdb)
 
@@ -139,8 +149,13 @@ func main() {
 		}
 	})
 
-	slog.Info("Server started", "Port", 8080)
-	errServer := http.ListenAndServe(":8080", hanlder)
+	apiPort := os.Getenv("API_PORT")
+
+	slog.Info("Server started", "Port", apiPort)
+
+	apiAddr := fmt.Sprintf(":%s", apiPort)
+
+	errServer := http.ListenAndServe(apiAddr, handler)
 	if errServer != nil {
 		slog.Error("Critical startup Error", "error", errServer)
 		os.Exit(1)

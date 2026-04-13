@@ -19,12 +19,10 @@ func Connect(connString string) (*Redis, error) {
 
 	client := redis.NewClient(opt)
 
-	pong, err := client.Ping(context.Background()).Result()
-	if err != nil {
-		return nil, fmt.Errorf("error: %v", err)
+	errPing := client.Ping(context.Background()).Err()
+	if errPing != nil {
+		return nil, fmt.Errorf("error: %v", errPing)
 	}
-
-	fmt.Println(pong)
 
 	return &Redis{Client: client}, nil
 }

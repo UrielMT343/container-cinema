@@ -42,6 +42,6 @@ func (q *RabbitMQ) PublishTicket(body []byte) (err error) {
 		return fmt.Errorf("error publishing the ticket: %v", err)
 	}
 
-	slog.Info("Message published", "message", body)
+	slog.Info("Message published", "queue", qd.Name)
 	return nil
 }
