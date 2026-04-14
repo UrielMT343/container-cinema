@@ -21,6 +21,15 @@ func NewHandler(s *Store, redis *redisclient.Redis) *Handler {
 	return &Handler{store: s, redis: redis}
 }
 
+// GetShowtimes retrieves all showtimes
+// @Summary Get all showtimes
+// @Description Retrieve a list of all movie showtimes
+// @Tags showtimes
+// @Accept json
+// @Produce json
+// @Success 200 {object} []models.Showtime "List of showtimes"
+// @Failure 500 {object} response.ErrorResponse "Internal server error"
+// @Router /public/showtimes [get]
 func (h *Handler) GetShowtimes(w http.ResponseWriter, r *http.Request) {
 	key := "showtime:all"
 
@@ -51,6 +60,17 @@ func (h *Handler) GetShowtimes(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
+// GetShowtimesByID retrieves a showtime by ID
+// @Summary Get showtime by ID
+// @Description Retrieve details of a specific showtime by its ID
+// @Tags showtimes
+// @Accept json
+// @Produce json
+// @Param id path int true "Showtime ID"
+// @Success 200 {object} models.Showtime "Showtime details"
+// @Failure 400 {object} response.ErrorResponse "Invalid showtime ID"
+// @Failure 500 {object} response.ErrorResponse "Internal server error"
+// @Router /public/showtimes/{id} [get]
 func (h *Handler) GetShowtimesByID(w http.ResponseWriter, r *http.Request) {
 	idStr := r.PathValue("id")
 	id, err := strconv.Atoi(idStr)

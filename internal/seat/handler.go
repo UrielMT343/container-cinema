@@ -22,6 +22,15 @@ func NewHandler(s *Store, r *redisclient.Redis) *Hander {
 	return &Hander{store: s, redis: r}
 }
 
+// GetSeats retrieves all seats
+// @Summary Get all seats
+// @Description Retrieve a list of all seats in the cinema
+// @Tags seats
+// @Accept json
+// @Produce json
+// @Success 200 {object} []models.Seat "List of seats"
+// @Failure 500 {object} response.ErrorResponse "Internal server error"
+// @Router /admin/seats [get]
 func (h *Hander) GetSeats(w http.ResponseWriter, r *http.Request) {
 	seats, err := h.store.GetAllSeats()
 	if err != nil {
@@ -33,6 +42,17 @@ func (h *Hander) GetSeats(w http.ResponseWriter, r *http.Request) {
 	response.Respond(w, http.StatusOK, seats)
 }
 
+// InsertSeat creates a new seat
+// @Summary Create a new seat
+// @Description Add a new seat to the cinema's seat catalog
+// @Tags seats
+// @Accept json
+// @Produce json
+// @Param request body models.Seat true "Seat data"
+// @Success 201 {object} models.Seat "Created seat"
+// @Failure 400 {object} response.ErrorResponse "Invalid request payload or validation error"
+// @Failure 500 {object} response.ErrorResponse "Internal server error"
+// @Router /admin/seats [post]
 func (h *Hander) InsertSeat(w http.ResponseWriter, r *http.Request) {
 	var seat models.Seat
 	err := json.NewDecoder(r.Body).Decode(&seat)
@@ -60,6 +80,17 @@ func (h *Hander) InsertSeat(w http.ResponseWriter, r *http.Request) {
 	response.Respond(w, http.StatusCreated, seat)
 }
 
+// GetSeatsByAuditorium retrieves seats by auditorium ID
+// @Summary Get seats by auditorium
+// @Description Retrieve all seats belonging to a specific auditorium
+// @Tags seats
+// @Accept json
+// @Produce json
+// @Param id path int true "Auditorium ID"
+// @Success 200 {object} []models.Seat "List of seats"
+// @Failure 400 {object} response.ErrorResponse "Invalid auditorium ID"
+// @Failure 500 {object} response.ErrorResponse "Internal server error"
+// @Router /admin/seats/auditorium/{id} [get]
 func (h *Hander) GetSeatsByAuditorium(w http.ResponseWriter, r *http.Request) {
 	idStr := r.PathValue("id")
 	id, err := strconv.Atoi(idStr)
@@ -79,6 +110,17 @@ func (h *Hander) GetSeatsByAuditorium(w http.ResponseWriter, r *http.Request) {
 	response.Respond(w, http.StatusOK, seats)
 }
 
+// GetSeatsByShowtime retrieves seats by showtime ID
+// @Summary Get seats by showtime
+// @Description Retrieve seat availability for a specific showtime
+// @Tags seats
+// @Accept json
+// @Produce json
+// @Param id path int true "Showtime ID"
+// @Success 200 {object} []models.Seat "List of seats with availability"
+// @Failure 400 {object} response.ErrorResponse "Invalid showtime ID"
+// @Failure 500 {object} response.ErrorResponse "Internal server error"
+// @Router /public/seats/showtime/{id} [get]
 func (h *Hander) GetSeatsByShowtime(w http.ResponseWriter, r *http.Request) {
 	idStr := r.PathValue("id")
 	id, err := strconv.Atoi(idStr)

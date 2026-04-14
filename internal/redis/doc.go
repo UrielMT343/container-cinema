@@ -1,6 +1,6 @@
 /*
-Package redisclient implements teh caching layer for the cinema
-reduding the database load by storing frequently accessed domain models.
-As well as managing ticket livecycles by using keyspace events
+Package redisclient implements the caching layer for the cinema,
+reducing database load by storing frequently accessed domain models.
+As well as managing ticket lifecycles by using keyspace events.
 */
 package redisclient

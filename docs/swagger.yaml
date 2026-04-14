@@ -1,0 +1,504 @@
+basePath: /api/v1
+definitions:
+  models.Movie:
+    properties:
+      durationMin:
+        type: integer
+      id:
+        type: integer
+      name:
+        type: string
+      synopsis:
+        type: string
+    type: object
+  models.Seat:
+    properties:
+      id:
+        type: integer
+      idAuditorium:
+        type: integer
+      number:
+        type: string
+    type: object
+  models.Showtime:
+    properties:
+      id:
+        type: integer
+      idAuditorium:
+        type: integer
+      idMovie:
+        type: integer
+      startTime:
+        type: string
+    type: object
+  models.Ticket:
+    properties:
+      id:
+        type: string
+      idSeat:
+        type: integer
+      idShowtime:
+        type: integer
+      idUser:
+        type: integer
+      status:
+        type: string
+    type: object
+  models.User:
+    properties:
+      email:
+        type: string
+      id:
+        type: integer
+      isActive:
+        type: boolean
+      name:
+        type: string
+      passwordHash:
+        type: string
+      role:
+        type: string
+    type: object
+  response.ErrorResponse:
+    properties:
+      error:
+        type: string
+    type: object
+  response.Response:
+    properties:
+      data: {}
+    type: object
+  ticket.ReqTicket:
+    properties:
+      idSeats:
+        items:
+          type: integer
+        type: array
+      idShowtime:
+        type: integer
+      idUser:
+        type: integer
+    type: object
+  user.LoginUser:
+    properties:
+      email:
+        type: string
+      passwordHash:
+        type: string
+    type: object
+  user.SafeUser:
+    properties:
+      email:
+        type: string
+      id:
+        type: integer
+      name:
+        type: string
+      role:
+        type: string
+    type: object
+host: localhost:8080
+info:
+  contact: {}
+  description: This is the distributed backend for the Cloud Cinema ticket booking
+    system.
+  title: Cloud Cinema API
+  version: "2.0"
+paths:
+  /admin/movies:
+    get:
+      consumes:
+      - application/json
+      description: Retrieve a paginated list of all movies
+      parameters:
+      - description: Number of items to return
+        in: query
+        name: limit
+        type: integer
+      - description: Page number
+        in: query
+        name: page
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: List of movies
+          schema:
+            items:
+              $ref: '#/definitions/models.Movie'
+            type: array
+        "500":
+          description: Internal server error
+          schema:
+            $ref: '#/definitions/response.ErrorResponse'
+      summary: Get all movies
+      tags:
+      - movies
+    post:
+      consumes:
+      - application/json
+      description: Add a new movie to the cinema's catalog
+      parameters:
+      - description: Movie data
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/models.Movie'
+      produces:
+      - application/json
+      responses:
+        "201":
+          description: Created movie
+          schema:
+            $ref: '#/definitions/models.Movie'
+        "400":
+          description: Invalid request payload or validation error
+          schema:
+            $ref: '#/definitions/response.ErrorResponse'
+        "500":
+          description: Internal server error
+          schema:
+            $ref: '#/definitions/response.ErrorResponse'
+      summary: Create a new movie
+      tags:
+      - movies
+  /admin/seats:
+    get:
+      consumes:
+      - application/json
+      description: Retrieve a list of all seats in the cinema
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: List of seats
+          schema:
+            items:
+              $ref: '#/definitions/models.Seat'
+            type: array
+        "500":
+          description: Internal server error
+          schema:
+            $ref: '#/definitions/response.ErrorResponse'
+      summary: Get all seats
+      tags:
+      - seats
+    post:
+      consumes:
+      - application/json
+      description: Add a new seat to the cinema's seat catalog
+      parameters:
+      - description: Seat data
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/models.Seat'
+      produces:
+      - application/json
+      responses:
+        "201":
+          description: Created seat
+          schema:
+            $ref: '#/definitions/models.Seat'
+        "400":
+          description: Invalid request payload or validation error
+          schema:
+            $ref: '#/definitions/response.ErrorResponse'
+        "500":
+          description: Internal server error
+          schema:
+            $ref: '#/definitions/response.ErrorResponse'
+      summary: Create a new seat
+      tags:
+      - seats
+  /admin/seats/auditorium/{id}:
+    get:
+      consumes:
+      - application/json
+      description: Retrieve all seats belonging to a specific auditorium
+      parameters:
+      - description: Auditorium ID
+        in: path
+        name: id
+        required: true
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: List of seats
+          schema:
+            items:
+              $ref: '#/definitions/models.Seat'
+            type: array
+        "400":
+          description: Invalid auditorium ID
+          schema:
+            $ref: '#/definitions/response.ErrorResponse'
+        "500":
+          description: Internal server error
+          schema:
+            $ref: '#/definitions/response.ErrorResponse'
+      summary: Get seats by auditorium
+      tags:
+      - seats
+  /admin/users:
+    post:
+      consumes:
+      - application/json
+      description: Create a new user account with the provided details
+      parameters:
+      - description: User registration data
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/models.User'
+      produces:
+      - application/json
+      responses:
+        "201":
+          description: Created user
+          schema:
+            $ref: '#/definitions/user.SafeUser'
+        "400":
+          description: Invalid request payload or validation error
+          schema:
+            $ref: '#/definitions/response.ErrorResponse'
+        "500":
+          description: Internal server error
+          schema:
+            $ref: '#/definitions/response.ErrorResponse'
+      summary: Register a new user
+      tags:
+      - users
+  /public/checkout/begin:
+    post:
+      consumes:
+      - application/json
+      description: Create a new cart for the checkout process
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: Cart created
+          schema:
+            $ref: '#/definitions/response.Response'
+        "500":
+          description: Internal server error
+          schema:
+            $ref: '#/definitions/response.ErrorResponse'
+      summary: Begin checkout process
+      tags:
+      - tickets
+  /public/login:
+    post:
+      consumes:
+      - application/json
+      description: Login with email and password to receive an authentication token
+      parameters:
+      - description: Login credentials
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/user.LoginUser'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: Logged in successfully
+          schema:
+            $ref: '#/definitions/response.Response'
+        "400":
+          description: Invalid request payload
+          schema:
+            $ref: '#/definitions/response.ErrorResponse'
+        "401":
+          description: Invalid email or password
+          schema:
+            $ref: '#/definitions/response.ErrorResponse'
+        "500":
+          description: Internal server error
+          schema:
+            $ref: '#/definitions/response.ErrorResponse'
+      summary: Authenticate user
+      tags:
+      - users
+  /public/seats/showtime/{id}:
+    get:
+      consumes:
+      - application/json
+      description: Retrieve seat availability for a specific showtime
+      parameters:
+      - description: Showtime ID
+        in: path
+        name: id
+        required: true
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: List of seats with availability
+          schema:
+            items:
+              $ref: '#/definitions/models.Seat'
+            type: array
+        "400":
+          description: Invalid showtime ID
+          schema:
+            $ref: '#/definitions/response.ErrorResponse'
+        "500":
+          description: Internal server error
+          schema:
+            $ref: '#/definitions/response.ErrorResponse'
+      summary: Get seats by showtime
+      tags:
+      - seats
+  /public/showtimes:
+    get:
+      consumes:
+      - application/json
+      description: Retrieve a list of all movie showtimes
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: List of showtimes
+          schema:
+            items:
+              $ref: '#/definitions/models.Showtime'
+            type: array
+        "500":
+          description: Internal server error
+          schema:
+            $ref: '#/definitions/response.ErrorResponse'
+      summary: Get all showtimes
+      tags:
+      - showtimes
+  /public/showtimes/{id}:
+    get:
+      consumes:
+      - application/json
+      description: Retrieve details of a specific showtime by its ID
+      parameters:
+      - description: Showtime ID
+        in: path
+        name: id
+        required: true
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: Showtime details
+          schema:
+            $ref: '#/definitions/models.Showtime'
+        "400":
+          description: Invalid showtime ID
+          schema:
+            $ref: '#/definitions/response.ErrorResponse'
+        "500":
+          description: Internal server error
+          schema:
+            $ref: '#/definitions/response.ErrorResponse'
+      summary: Get showtime by ID
+      tags:
+      - showtimes
+  /user/ticket/{id}:
+    delete:
+      consumes:
+      - application/json
+      description: Cancel a ticket by its ID
+      parameters:
+      - description: Ticket ID
+        in: path
+        name: id
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "204":
+          description: Ticket cancelled successfully
+        "400":
+          description: Invalid ticket ID
+          schema:
+            $ref: '#/definitions/response.ErrorResponse'
+        "404":
+          description: Ticket not found
+          schema:
+            $ref: '#/definitions/response.ErrorResponse'
+        "500":
+          description: Internal server error
+          schema:
+            $ref: '#/definitions/response.ErrorResponse'
+      summary: Cancel a ticket
+      tags:
+      - tickets
+  /user/ticket/hold:
+    post:
+      consumes:
+      - application/json
+      description: Hold seats for a user by creating temporary ticket reservations
+      parameters:
+      - description: Request payload
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/ticket.ReqTicket'
+      produces:
+      - application/json
+      responses:
+        "202":
+          description: Held tickets
+          schema:
+            items:
+              $ref: '#/definitions/models.Ticket'
+            type: array
+        "400":
+          description: Invalid request payload or seat selection
+          schema:
+            $ref: '#/definitions/response.ErrorResponse'
+        "409":
+          description: Seat already taken
+          schema:
+            $ref: '#/definitions/response.ErrorResponse'
+        "500":
+          description: Internal server error
+          schema:
+            $ref: '#/definitions/response.ErrorResponse'
+      summary: Hold tickets for seats
+      tags:
+      - tickets
+  /user/ticket/pay:
+    patch:
+      consumes:
+      - application/json
+      description: Confirm held tickets by cart ID and mark them as sold
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: Confirmed tickets
+          schema:
+            items:
+              $ref: '#/definitions/models.Ticket'
+            type: array
+        "400":
+          description: Invalid ticket ID
+          schema:
+            $ref: '#/definitions/response.ErrorResponse'
+        "500":
+          description: Internal server error
+          schema:
+            $ref: '#/definitions/response.ErrorResponse'
+      summary: Confirm held tickets
+      tags:
+      - tickets
+swagger: "2.0"

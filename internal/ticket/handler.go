@@ -35,6 +35,16 @@ func NewHandler(st *Store, q *rabbitmq.RabbitMQ, r *redisclient.Redis) *Handler 
 	return &Handler{store: st, queue: q, redis: r}
 }
 
+// ConfirmTicket confirms held tickets and marks them as sold
+// @Summary Confirm held tickets
+// @Description Confirm held tickets by cart ID and mark them as sold
+// @Tags tickets
+// @Accept json
+// @Produce json
+// @Success 200 {object} []models.Ticket "Confirmed tickets"
+// @Failure 400 {object} response.ErrorResponse "Invalid ticket ID"
+// @Failure 500 {object} response.ErrorResponse "Internal server error"
+// @Router /user/ticket/pay [patch]
 func (h *Handler) ConfirmTicket(w http.ResponseWriter, r *http.Request) {
 	cartID, ok := r.Context().Value(auth.CartContextKey).(string)
 	if !ok {
@@ -79,7 +89,7 @@ func (h *Handler) ConfirmTicket(w http.ResponseWriter, r *http.Request) {
 		slog.Warn("Failed to invalidate cache", "error", errDelete, "key", cacheShowtimeKey)
 	}
 
-	for _, ticket := range updatedTickets{
+	for _, ticket := range updatedTickets {
 		cacheHoldKey := h.redis.BuildHoldTicketKey(ticket.ID, ticket.IDShowtime)
 		errDeleteHold := h.redis.DeleteKey(cacheHoldKey)
 		if errDeleteHold != nil {
@@ -90,6 +100,18 @@ func (h *Handler) ConfirmTicket(w http.ResponseWriter, r *http.Request) {
 	response.Respond(w, http.StatusOK, updatedTickets)
 }
 
+// HoldTicket holds seats for a user
+// @Summary Hold tickets for seats
+// @Description Hold seats for a user by creating temporary ticket reservations
+// @Tags tickets
+// @Accept json
+// @Produce json
+// @Param request body ReqTicket true "Request payload"
+// @Success 202 {object} []models.Ticket "Held tickets"
+// @Failure 400 {object} response.ErrorResponse "Invalid request payload or seat selection"
+// @Failure 409 {object} response.ErrorResponse "Seat already taken"
+// @Failure 500 {object} response.ErrorResponse "Internal server error"
+// @Router /user/ticket/hold [post]
 func (h *Handler) HoldTicket(w http.ResponseWriter, r *http.Request) {
 	cartID, ok := r.Context().Value(auth.CartContextKey).(string)
 	if !ok {
@@ -115,7 +137,7 @@ func (h *Handler) HoldTicket(w http.ResponseWriter, r *http.Request) {
 	seatLimit := int64(config.SeatsLimit)
 	currentSeats, _ := h.redis.SetCardinality(cartID)
 
-	if currentSeats + requestedSeats > seatLimit {
+	if currentSeats+requestedSeats > seatLimit {
 		slog.Error("Too many seats taken", "current", currentSeats, "requested", requestedSeats)
 		message := fmt.Sprintf("You can only hold %d seats at a time.", seatLimit)
 		response.Error(w, http.StatusBadRequest, message)
@@ -181,6 +203,18 @@ func (h *Handler) HoldTicket(w http.ResponseWriter, r *http.Request) {
 	response.Respond(w, http.StatusAccepted, tickets)
 }
 
+// CancelTicket cancels a ticket by ID
+// @Summary Cancel a ticket
+// @Description Cancel a ticket by its ID
+// @Tags tickets
+// @Accept json
+// @Produce json
+// @Param id path string true "Ticket ID"
+// @Success 204 "Ticket cancelled successfully"
+// @Failure 400 {object} response.ErrorResponse "Invalid ticket ID"
+// @Failure 404 {object} response.ErrorResponse "Ticket not found"
+// @Failure 500 {object} response.ErrorResponse "Internal server error"
+// @Router /user/ticket/{id} [delete]
 func (h *Handler) CancelTicket(w http.ResponseWriter, r *http.Request) {
 	idStr := r.PathValue("id")
 	id, err := uuid.Parse(idStr)
@@ -206,6 +240,15 @@ func (h *Handler) CancelTicket(w http.ResponseWriter, r *http.Request) {
 	response.Respond(w, http.StatusNoContent, nil)
 }
 
+// BeginCheckout begins the checkout process by creating a cart
+// @Summary Begin checkout process
+// @Description Create a new cart for the checkout process
+// @Tags tickets
+// @Accept json
+// @Produce json
+// @Success 200 {object} response.Response "Cart created"
+// @Failure 500 {object} response.ErrorResponse "Internal server error"
+// @Router /public/checkout/begin [post]
 func (h *Handler) BeginCheckout(w http.ResponseWriter, r *http.Request) {
 	cartID := uuid.New()
 	cartIDstr := "cart_" + cartID.String()
@@ -213,13 +256,13 @@ func (h *Handler) BeginCheckout(w http.ResponseWriter, r *http.Request) {
 	tokenExp := config.CartIDCookieTTLMinutes
 
 	httpCookie := http.Cookie{
-		Name: "cart_id",
-		Value: cartIDstr,
-		Expires: time.Now().Add(tokenExp),
+		Name:     "cart_id",
+		Value:    cartIDstr,
+		Expires:  time.Now().Add(tokenExp),
 		HttpOnly: true,
-		Secure: false,
+		Secure:   false,
 		SameSite: http.SameSiteStrictMode,
-		Path: "/",
+		Path:     "/",
 	}
 
 	http.SetCookie(w, &httpCookie)

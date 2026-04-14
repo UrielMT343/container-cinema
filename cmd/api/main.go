@@ -21,6 +21,11 @@ import (
 	"github.com/google/uuid"
 )
 
+// @title           Cloud Cinema API
+// @version         2.0
+// @description     This is the distributed backend for the Cloud Cinema ticket booking system.
+// @host            localhost:8080
+// @BasePath        /api/v1
 func main() {
 	logger := slog.New(slog.NewJSONHandler(os.Stdout, nil))
 	slog.SetDefault(logger)

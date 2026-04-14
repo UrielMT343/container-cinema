@@ -7,27 +7,29 @@ import (
 )
 
 type Response struct {
-	Data  any    `json:"data,omitempty"`
-	Error string `json:"error,omitempty"`
+	Data any `json:"data,omitempty"`
+}
+
+type ErrorResponse struct {
+	Error string `json:"error"`
 }
 
 func Respond(w http.ResponseWriter, status int, data any) {
 	w.Header().Set("Content-Type", "application/json")
-
-	payload, err := json.Marshal(Response{Data: data})
-	if err != nil {
-		log.Printf("marshal error: %v", err)
-		w.WriteHeader(http.StatusInternalServerError)
-		return
-	}
-
 	w.WriteHeader(status)
-	_, errWrite := w.Write(payload)
-	if errWrite != nil {
-		log.Printf("failed to write response to client: %v", err)
+
+	err := json.NewEncoder(w).Encode(Response{Data: data})
+	if err != nil {
+		log.Printf("failed to write success response: %v", err)
 	}
 }
 
 func Error(w http.ResponseWriter, status int, message string) {
-	Respond(w, status, Response{Error: message})
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(status)
+
+	err := json.NewEncoder(w).Encode(ErrorResponse{Error: message})
+	if err != nil {
+		log.Printf("failed to write error response: %v", err)
+	}
 }

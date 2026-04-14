@@ -1,5 +1,5 @@
 /*
-Package movie provides the core domain logic, HTTP handlers,
+Package auditorium provides the core domain logic, HTTP handlers,
 and data persistence for managing the cinema's auditorium catalog.
 */
 package auditorium

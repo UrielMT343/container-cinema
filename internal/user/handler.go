@@ -14,7 +14,7 @@ import (
 )
 
 type Handler struct {
-	store *Store
+	store  *Store
 	secret string
 }
 
@@ -34,6 +34,17 @@ type LoginUser struct {
 	PasswordHash string `json:"passwordHash"`
 }
 
+// InsertUser creates a new user
+// @Summary Register a new user
+// @Description Create a new user account with the provided details
+// @Tags users
+// @Accept json
+// @Produce json
+// @Param request body models.User true "User registration data"
+// @Success 201 {object} SafeUser "Created user"
+// @Failure 400 {object} response.ErrorResponse "Invalid request payload or validation error"
+// @Failure 500 {object} response.ErrorResponse "Internal server error"
+// @Router /admin/users [post]
 func (h *Handler) InsertUser(w http.ResponseWriter, r *http.Request) {
 	var baseUser models.User
 	err := json.NewDecoder(r.Body).Decode(&baseUser)
@@ -60,7 +71,7 @@ func (h *Handler) InsertUser(w http.ResponseWriter, r *http.Request) {
 	user := models.User{
 		ID:           baseUser.ID,
 		Name:         baseUser.Name,
-		Email: 		  baseUser.Email,
+		Email:        baseUser.Email,
 		PasswordHash: string(hashPassword),
 		IsActive:     baseUser.IsActive,
 		Role:         baseUser.Role,
@@ -83,6 +94,18 @@ func (h *Handler) InsertUser(w http.ResponseWriter, r *http.Request) {
 	response.Respond(w, http.StatusCreated, safeUser)
 }
 
+// LoginUser authenticates a user and returns a JWT token
+// @Summary Authenticate user
+// @Description Login with email and password to receive an authentication token
+// @Tags users
+// @Accept json
+// @Produce json
+// @Param request body LoginUser true "Login credentials"
+// @Success 200 {object} response.Response "Logged in successfully"
+// @Failure 400 {object} response.ErrorResponse "Invalid request payload"
+// @Failure 401 {object} response.ErrorResponse "Invalid email or password"
+// @Failure 500 {object} response.ErrorResponse "Internal server error"
+// @Router /public/login [post]
 func (h *Handler) LoginUser(w http.ResponseWriter, r *http.Request) {
 	var loginUser LoginUser
 	err := json.NewDecoder(r.Body).Decode(&loginUser)
@@ -114,13 +137,13 @@ func (h *Handler) LoginUser(w http.ResponseWriter, r *http.Request) {
 	}
 
 	httpCookie := http.Cookie{
-		Name: "cinema_auth_token",
-		Value: tokenString,
-		Expires: time.Now().Add(tokenExp),
+		Name:     "cinema_auth_token",
+		Value:    tokenString,
+		Expires:  time.Now().Add(tokenExp),
 		HttpOnly: true,
-		Secure: false,
+		Secure:   false,
 		SameSite: http.SameSiteStrictMode,
-		Path: "/",
+		Path:     "/",
 	}
 
 	http.SetCookie(w, &httpCookie)

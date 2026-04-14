@@ -1,2 +1,2 @@
-// Package config provides primitives to get enviremomental variables
+// Package config provides primitives to get environmental variables
 package config

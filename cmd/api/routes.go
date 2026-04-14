@@ -10,6 +10,10 @@ import (
 	"start/internal/showtime"
 	"start/internal/ticket"
 	"start/internal/user"
+
+	_ "start/docs"
+
+	httpSwagger "github.com/swaggo/http-swagger"
 )
 
 type Config struct {
@@ -59,6 +63,7 @@ func routes(c *Config, basePrefix string, secret string) http.Handler {
 	apiMux.Handle("/user/", http.StripPrefix("/user", userStack))
 
 	mainMux.Handle(prefix, http.StripPrefix(basePrefix, apiMux))
+	mainMux.Handle("/swagger/", httpSwagger.WrapHandler)
 
 	finalMux := middleware.Logger(mainMux)
 
