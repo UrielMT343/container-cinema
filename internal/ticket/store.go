@@ -134,7 +134,7 @@ func (s *Store) UpdateTicketStatuses(ctx context.Context, status string, ids []u
 	return updatedTickets, nil
 }
 
-func (s *Store) DeleteTicket(id uuid.UUID) error {
+func (s *Store) DeleteTicket(ctx context.Context, id uuid.UUID) error {
 	pool := s.db.GetDB()
 
 	query := `
@@ -143,7 +143,7 @@ func (s *Store) DeleteTicket(id uuid.UUID) error {
 		AND status = 'HOLD'
 	`
 
-	tag, err := pool.Exec(context.Background(), query, id)
+	tag, err := pool.Exec(ctx, query, id)
 	if err != nil {
 		return fmt.Errorf("error deleting the ticket: %v", err)
 	}
@@ -154,4 +154,36 @@ func (s *Store) DeleteTicket(id uuid.UUID) error {
 	}
 
 	return nil
+}
+
+func (s *Store) CheckIfSeatOccupied(ctx context.Context, seatIDs []int, showtimeID int) ([]string, error) {
+	if len(seatIDs) == 0 {
+		return nil, nil
+	}
+
+	pool := s.db.GetDB()
+
+	var occupiedSeats []string
+
+	query := `
+		SELECT COALESCE(
+  		array_agg(DISTINCT s.number ORDER BY s.number),
+  		ARRAY[]::text[]
+		) AS occupied_seat_numbers
+		FROM tickets t
+		INNER JOIN seats s ON s.id = t.id_seat
+		WHERE t.id_showtime = $1
+  	AND t.id_seat = ANY($2::int[])
+  	AND t.status IN ('HELD', 'SOLD');
+	`
+	err := pool.QueryRow(ctx, query, showtimeID, seatIDs).Scan(&occupiedSeats)
+	if err != nil {
+		return nil, err
+	}
+
+	if len(occupiedSeats) == 0 {
+		return nil, nil
+	}
+
+	return occupiedSeats, nil
 }

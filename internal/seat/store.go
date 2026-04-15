@@ -16,12 +16,12 @@ func New(s *database.Service) *Store {
 	return &Store{db: s}
 }
 
-func (s *Store) GetAllSeats() ([]models.Seat, error) {
+func (s *Store) GetAllSeats(ctx context.Context) ([]models.Seat, error) {
 	query := `
 		SELECT * FROM seats
 	`
 
-	seats, err := database.QueryRows[models.Seat](s.db, context.Background(), query)
+	seats, err := database.QueryRows[models.Seat](s.db, ctx, query)
 	if err != nil {
 		return nil, fmt.Errorf("error while getting all seats: %v", err)
 	}
@@ -29,7 +29,7 @@ func (s *Store) GetAllSeats() ([]models.Seat, error) {
 	return seats, nil
 }
 
-func (s *Store) CreateSeat(seat models.Seat) (int, error) {
+func (s *Store) CreateSeat(ctx context.Context, seat models.Seat) (int, error) {
 	pool := s.db.GetDB()
 
 	if err := seat.Validate(); err != nil {
@@ -42,7 +42,7 @@ func (s *Store) CreateSeat(seat models.Seat) (int, error) {
 		RETURNING id
 	`
 
-	err := pool.QueryRow(context.Background(), query, seat.Number, seat.IDAuditorium).Scan(&seat.ID)
+	err := pool.QueryRow(ctx, query, seat.Number, seat.IDAuditorium).Scan(&seat.ID)
 	if err != nil {
 		return 0, fmt.Errorf("error while creating the seat: %v", err)
 	}
@@ -50,20 +50,20 @@ func (s *Store) CreateSeat(seat models.Seat) (int, error) {
 	return seat.ID, nil
 }
 
-func (s *Store) GetSeatsByAuditorium(idAuditorium int) ([]models.Seat, error) {
+func (s *Store) GetSeatsByAuditorium(ctx context.Context, idAuditorium int) ([]models.Seat, error) {
 	query := `
 		SELECT * FROM seats
 		WHERE id_auditorium = $1
 	`
 
-	seats, err := database.QueryRows[models.Seat](s.db, context.Background(), query, idAuditorium)
+	seats, err := database.QueryRows[models.Seat](s.db, ctx, query, idAuditorium)
 	if err != nil {
 		return nil, fmt.Errorf("error while obtaining the seats: %v", err)
 	}
 	return seats, nil
 }
 
-func (s *Store) GetSeatsByShowtime(idShowtime int) ([]models.ShowtimeSeat, error) {
+func (s *Store) GetSeatsByShowtime(ctx context.Context, idShowtime int) ([]models.ShowtimeSeat, error) {
 	query := `
 		SELECT
 		    s.id AS id,
@@ -75,7 +75,7 @@ func (s *Store) GetSeatsByShowtime(idShowtime int) ([]models.ShowtimeSeat, error
 		WHERE st.id = $1;
 	`
 
-	seats, err := database.QueryRows[models.ShowtimeSeat](s.db, context.Background(), query, idShowtime)
+	seats, err := database.QueryRows[models.ShowtimeSeat](s.db, ctx, query, idShowtime)
 	if err != nil {
 		return nil, fmt.Errorf("error while obtaining the seats: %v", err)
 	}

@@ -6,8 +6,11 @@ import (
 	"log/slog"
 	"net/http"
 	"os"
+	"os/signal"
 	"strconv"
 	"strings"
+	"syscall"
+	"time"
 
 	"start/internal/database"
 	"start/internal/movie"
@@ -32,6 +35,9 @@ func main() {
 
 	slog.Info("Starting Cloud Cinema API", "version", "1.0.0", "env", "testing")
 
+	rootCtx, stopCtx := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
+	defer stopCtx()
+
 	pgUser := os.Getenv("POSTGRES_USER")
 	pass := os.Getenv("POSTGRES_PASSWORD")
 	host := os.Getenv("DATABASE_HOST")
@@ -41,7 +47,7 @@ func main() {
 	url := fmt.Sprintf("postgres://%s:%s@%s:%s/%s",
 		pgUser, pass, host, port, db,
 	)
-	service, err := database.NewConnection(context.Background(), url)
+	service, err := database.NewConnection(rootCtx, url)
 	if err != nil {
 		slog.Error("Critical startup error", "error", err)
 		os.Exit(1)
@@ -79,7 +85,7 @@ func main() {
 		redisDB,
 	)
 
-	rdb, err := redisclient.Connect(redisURL)
+	rdb, err := redisclient.Connect(redisURL, rootCtx)
 	if err != nil {
 		slog.Error("Critical startup error", "error", err)
 		os.Exit(1)
@@ -115,9 +121,9 @@ func main() {
 
 	handler := routes(cfg, basePrefix, tokenSecret)
 
-	go queue.ConsumeTicket(ticketStore.CreateTicket, rdb)
+	go queue.ConsumeTicket(rootCtx, ticketStore.CreateTicket, rdb)
 
-	go rdb.ListenForTicketExpirations(func(expiredKey string) {
+	go rdb.ListenForTicketExpirations(rootCtx, func(expiredKey string) {
 		parts := strings.Split(expiredKey, ":")
 		if len(parts) != 4 {
 			slog.Warn("Unknown key format expired:", "expiredKey", expiredKey)
@@ -133,7 +139,7 @@ func main() {
 			return
 		}
 
-		errDeleteTicket := ticketStore.DeleteTicket(ticketUUID)
+		errDeleteTicket := ticketStore.DeleteTicket(rootCtx, ticketUUID)
 		if errDeleteTicket != nil {
 			slog.Error("Failed to delete the ticket", "ticket", ticketUUID)
 			return
@@ -148,7 +154,7 @@ func main() {
 
 		cacheShowtimeKey := rdb.BuildShowtimeSeatsKey(idShowtime)
 
-		errDeleteKey := rdb.DeleteKey(cacheShowtimeKey)
+		errDeleteKey := rdb.DeleteKey(cacheShowtimeKey, rootCtx)
 		if errDeleteKey != nil {
 			slog.Warn("Failed to invalidate cache", "showtimeKey", cacheShowtimeKey, "error", errDeleteKey)
 		}
@@ -156,13 +162,40 @@ func main() {
 
 	apiPort := os.Getenv("API_PORT")
 
-	slog.Info("Server started", "Port", apiPort)
-
 	apiAddr := fmt.Sprintf(":%s", apiPort)
 
-	errServer := http.ListenAndServe(apiAddr, handler)
-	if errServer != nil {
-		slog.Error("Critical startup Error", "error", errServer)
-		os.Exit(1)
+	srv := &http.Server{
+		Addr:    apiAddr,
+		Handler: handler,
 	}
+
+	slog.Info("Server started", "Port", apiPort)
+
+	go func() {
+		if err := srv.ListenAndServe(); err != nil && err != http.ErrServerClosed {
+			slog.Error("Critical server error", "error", err)
+		}
+	}()
+	<-rootCtx.Done()
+	slog.Info("Shutdown signal received, initiating graceful teardown...")
+
+	shutdownCtx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+
+	if err := srv.Shutdown(shutdownCtx); err != nil {
+		slog.Error("Server forced to shutdown", "error", err)
+	}
+
+	service.CloseConnection()
+	errRabbitClose := queue.Close()
+	if errRabbitClose != nil {
+		slog.Error("Error closing Rabbit service", "error", errRabbitClose)
+	}
+
+	errRedisClose := rdb.Close()
+	if errRedisClose != nil {
+		slog.Error("Error closing Redis service", "error", errRedisClose)
+	}
+
+	slog.Info("Cloud Cinema API cleanly stopped")
 }

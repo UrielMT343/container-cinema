@@ -48,7 +48,9 @@ func (h *Handler) GetMovies(w http.ResponseWriter, r *http.Request) {
 
 	offset := (page - 1) * limit
 
-	movies, err := h.store.GetAllMovies(limit, offset)
+	ctx := r.Context()
+
+	movies, err := h.store.GetAllMovies(ctx, limit, offset)
 	if err != nil {
 		slog.Error("Failed to get all movies", "error", err)
 		response.Error(w, http.StatusInternalServerError, "An unexpected error occurred")
@@ -85,7 +87,9 @@ func (h *Handler) InsertMovie(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	id, err := h.store.CreateMovie(movie)
+	ctx := r.Context()
+
+	id, err := h.store.CreateMovie(ctx, movie)
 	if err != nil {
 		slog.Error("Failed to create new movie", "error", err)
 		response.Error(w, http.StatusInternalServerError, "An unexpected error occurred")

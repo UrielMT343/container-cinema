@@ -12,7 +12,7 @@ import (
 	amqp "github.com/rabbitmq/amqp091-go"
 )
 
-func (q *RabbitMQ) ConsumeTicket(insertTicketsToDB func(ctx context.Context, tickets []models.Ticket) ([]models.Ticket, error), rdb *redisclient.Redis) {
+func (q *RabbitMQ) ConsumeTicket(ctx context.Context, insertTicketsToDB func(ctx context.Context, tickets []models.Ticket) ([]models.Ticket, error), rdb *redisclient.Redis) {
 	ch, err := q.NewChannel()
 	if err != nil {
 		return
@@ -62,8 +62,8 @@ func (q *RabbitMQ) ConsumeTicket(insertTicketsToDB func(ctx context.Context, tic
 				continue
 			}
 
-			ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-			_, err = insertTicketsToDB(ctx, tickets)
+			ctxInsert, cancel := context.WithTimeout(ctx, 5*time.Second)
+			_, err = insertTicketsToDB(ctxInsert, tickets)
 			cancel()
 			if err != nil {
 				slog.Error("Error inserting tickets to DB:", "error", err)
@@ -77,7 +77,7 @@ func (q *RabbitMQ) ConsumeTicket(insertTicketsToDB func(ctx context.Context, tic
 
 			showtimeKey := rdb.BuildShowtimeSeatsKey(tickets[0].IDShowtime)
 
-			errDelete := rdb.DeleteKey(showtimeKey)
+			errDelete := rdb.DeleteKey(showtimeKey, ctx)
 			if errDelete != nil {
 				slog.Warn("Failed to clear cache", "key", showtimeKey)
 			}

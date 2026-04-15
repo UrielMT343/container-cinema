@@ -33,10 +33,12 @@ func NewHandler(s *Store, redis *redisclient.Redis) *Handler {
 func (h *Handler) GetShowtimes(w http.ResponseWriter, r *http.Request) {
 	key := "showtime:all"
 
-	val, err := h.redis.GetCache(key)
+	ctx := r.Context()
+
+	val, err := h.redis.GetCache(key, ctx)
 
 	if errors.Is(err, redisclient.ErrCacheNotFound) {
-		showtimes, err := h.store.GetAllShowtimes()
+		showtimes, err := h.store.GetAllShowtimes(ctx)
 		if err != nil {
 			slog.Error("Failed to get showtimes", "error", err)
 			response.Error(w, http.StatusInternalServerError, "An unexpected error occurred")
@@ -45,7 +47,7 @@ func (h *Handler) GetShowtimes(w http.ResponseWriter, r *http.Request) {
 
 		ttl := config.CacheTTLMinutes
 
-		errSetCache := h.redis.SetCache(key, showtimes, ttl)
+		errSetCache := h.redis.SetCache(key, showtimes, ttl, ctx)
 		if errSetCache != nil {
 			slog.Error("Failed to set cache", "error", errSetCache, "key", key)
 			response.Error(w, http.StatusInternalServerError, "An unexpected error occurred")
@@ -80,7 +82,8 @@ func (h *Handler) GetShowtimesByID(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	showtime, err := h.store.GetShowtimeByID(id)
+	ctx := r.Context()
+	showtime, err := h.store.GetShowtimeByID(ctx, id)
 	if err != nil {
 		slog.Error("Failed to get showtime", "error", err, "path", r.URL.Path)
 		response.Error(w, http.StatusInternalServerError, "An unexpected error occurred")

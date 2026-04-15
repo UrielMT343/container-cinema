@@ -26,3 +26,11 @@ func (q *RabbitMQ) NewChannel() (*amqp.Channel, error) {
 
 	return ch, nil
 }
+
+func (q *RabbitMQ) Close() error {
+	err := q.queue.Close()
+	if err != nil {
+		return err
+	}
+	return nil
+}

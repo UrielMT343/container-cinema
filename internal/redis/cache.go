@@ -11,8 +11,8 @@ import (
 
 var ErrCacheNotFound = errors.New("data not found")
 
-func (client *Redis) GetCache(key string) (string, error) {
-	val, err := client.Client.Get(context.Background(), key).Result()
+func (client *Redis) GetCache(key string, ctx context.Context) (string, error) {
+	val, err := client.Client.Get(ctx, key).Result()
 
 	if err == redis.Nil {
 		return "", ErrCacheNotFound
@@ -23,13 +23,13 @@ func (client *Redis) GetCache(key string) (string, error) {
 	}
 }
 
-func (client *Redis) SetCache(key string, value any, ttl time.Duration) error {
+func (client *Redis) SetCache(key string, value any, ttl time.Duration, ctx context.Context) error {
 	data, errMarshal := json.Marshal(value)
 	if errMarshal != nil {
 		return errMarshal
 	}
 
-	err := client.Client.Set(context.Background(), key, data, ttl).Err()
+	err := client.Client.Set(ctx, key, data, ttl).Err()
 	if err != nil {
 		return err
 	}
@@ -37,8 +37,8 @@ func (client *Redis) SetCache(key string, value any, ttl time.Duration) error {
 	return nil
 }
 
-func (client *Redis) DeleteKey(key string) error {
-	err := client.Client.Del(context.Background(), key)
+func (client *Redis) DeleteKey(key string, ctx context.Context) error {
+	err := client.Client.Del(ctx, key)
 	if err != nil {
 		return err.Err()
 	}
@@ -46,8 +46,8 @@ func (client *Redis) DeleteKey(key string) error {
 	return nil
 }
 
-func (client *Redis) SetCardinality(key string) (int64, error) {
-	count, err := client.Client.SCard(context.Background(), key).Result()
+func (client *Redis) SetCardinality(key string, ctx context.Context) (int64, error) {
+	count, err := client.Client.SCard(ctx, key).Result()
 	if err != nil {
 		return 0, err
 	}
@@ -55,8 +55,8 @@ func (client *Redis) SetCardinality(key string) (int64, error) {
 	return count, nil
 }
 
-func (client *Redis) SetAdd(key string, members ...any) error {
-	err := client.Client.SAdd(context.Background(), key, members...).Err()
+func (client *Redis) SetAdd(key string, ctx context.Context, members ...any) error {
+	err := client.Client.SAdd(ctx, key, members...).Err()
 	if err != nil {
 		return err
 	}
@@ -64,15 +64,15 @@ func (client *Redis) SetAdd(key string, members ...any) error {
 	return nil
 }
 
-func (client *Redis) SetCacheNX(key string, value any, ttl time.Duration) (bool, error) {
+func (client *Redis) SetCacheNX(key string, value any, ttl time.Duration, ctx context.Context) (bool, error) {
 	data, errMarshal := json.Marshal(value)
 	if errMarshal != nil {
 		return false, errMarshal
 	}
 
-	err := client.Client.SetArgs(context.Background(), key, data, redis.SetArgs{
+	err := client.Client.SetArgs(ctx, key, data, redis.SetArgs{
 		Mode: "NX",
-		TTL: ttl,
+		TTL:  ttl,
 	}).Err()
 
 	if err == redis.Nil {
@@ -86,8 +86,8 @@ func (client *Redis) SetCacheNX(key string, value any, ttl time.Duration) (bool,
 	return true, nil
 }
 
-func (client *Redis) Expire(key string, ttl time.Duration) error {
-	err := client.Client.Expire(context.Background(), key, ttl).Err()
+func (client *Redis) Expire(key string, ttl time.Duration, ctx context.Context) error {
+	err := client.Client.Expire(ctx, key, ttl).Err()
 	if err != nil {
 		return err
 	}
@@ -95,8 +95,8 @@ func (client *Redis) Expire(key string, ttl time.Duration) error {
 	return nil
 }
 
-func (client *Redis) SetMembers(key string) ([]string, error) {
-	members, err := client.Client.SMembers(context.Background(), key).Result()
+func (client *Redis) SetMembers(key string, ctx context.Context) ([]string, error) {
+	members, err := client.Client.SMembers(ctx, key).Result()
 	if err != nil {
 		return nil, err
 	}

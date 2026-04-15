@@ -5,7 +5,7 @@ import (
 	"strings"
 )
 
-func (client *Redis) ListenForTicketExpirations(onExpire func(key string)) {
+func (client *Redis) ListenForTicketExpirations(ctx context.Context, onExpire func(key string)) {
 	pubsub := client.Client.Subscribe(context.Background(), "__keyevent@0__:expired")
 
 	ch := pubsub.Channel()

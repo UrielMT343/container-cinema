@@ -1,12 +1,12 @@
 package ticket
 
 import (
-	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
 	"log/slog"
 	"net/http"
+	"strings"
 	"time"
 
 	"start/internal/auth"
@@ -52,7 +52,9 @@ func (h *Handler) ConfirmTicket(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	ticketIDsStr, err := h.redis.SetMembers(cartID)
+	ctx := r.Context()
+
+	ticketIDsStr, err := h.redis.SetMembers(cartID, ctx)
 	if err != nil {
 		slog.Error("Failed to retrieve cart items", "error", err)
 		response.Error(w, http.StatusInternalServerError, "Cart items lost")
@@ -72,7 +74,6 @@ func (h *Handler) ConfirmTicket(w http.ResponseWriter, r *http.Request) {
 		ticketUUIDSlice = append(ticketUUIDSlice, id)
 	}
 
-	ctx := context.Background()
 	updatedTickets, errUpdate := h.store.UpdateTicketStatuses(ctx, "SOLD", ticketUUIDSlice)
 	if errUpdate != nil {
 		slog.Error("Failed to updated tickets", "error", errUpdate)
@@ -84,14 +85,14 @@ func (h *Handler) ConfirmTicket(w http.ResponseWriter, r *http.Request) {
 
 	cacheShowtimeKey := h.redis.BuildShowtimeSeatsKey(IDShowtime)
 
-	errDelete := h.redis.DeleteKey(cacheShowtimeKey)
+	errDelete := h.redis.DeleteKey(cacheShowtimeKey, ctx)
 	if errDelete != nil {
 		slog.Warn("Failed to invalidate cache", "error", errDelete, "key", cacheShowtimeKey)
 	}
 
 	for _, ticket := range updatedTickets {
 		cacheHoldKey := h.redis.BuildHoldTicketKey(ticket.ID, ticket.IDShowtime)
-		errDeleteHold := h.redis.DeleteKey(cacheHoldKey)
+		errDeleteHold := h.redis.DeleteKey(cacheHoldKey, ctx)
 		if errDeleteHold != nil {
 			slog.Warn("Failed to invalidate cache", "error", errDeleteHold, "key", cacheHoldKey)
 		}
@@ -120,6 +121,8 @@ func (h *Handler) HoldTicket(w http.ResponseWriter, r *http.Request) {
 	}
 	slog.Info("Holding tickets for cart", "cart_id", cartID)
 
+	ctx := r.Context()
+
 	var reqTicket ReqTicket
 	err := json.NewDecoder(r.Body).Decode(&reqTicket)
 	if err != nil {
@@ -135,7 +138,7 @@ func (h *Handler) HoldTicket(w http.ResponseWriter, r *http.Request) {
 	}
 
 	seatLimit := int64(config.SeatsLimit)
-	currentSeats, _ := h.redis.SetCardinality(cartID)
+	currentSeats, _ := h.redis.SetCardinality(cartID, ctx)
 
 	if currentSeats+requestedSeats > seatLimit {
 		slog.Error("Too many seats taken", "current", currentSeats, "requested", requestedSeats)
@@ -144,12 +147,30 @@ func (h *Handler) HoldTicket(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	occupiedSeats, errSeats := h.store.CheckIfSeatOccupied(ctx, reqTicket.IDSeats, reqTicket.IDShowtime)
+	if errSeats != nil {
+		slog.Error("Error while getting the occupied seats", "error", errSeats)
+		response.Error(w, http.StatusInternalServerError, "Cart ID lost in transit")
+		return
+	}
+
+	if len(occupiedSeats) > 0 {
+		slog.Warn("User attempted to book occupied seats", "occupiedSeats", occupiedSeats)
+
+		var strSeats []string
+		strSeats = append(strSeats, occupiedSeats...)
+		errorMsg := fmt.Sprintf("The following seats are already taken: %s", strings.Join(strSeats, ", "))
+
+		response.Error(w, http.StatusConflict, errorMsg)
+		return
+	}
+
 	ttl := time.Duration(config.HoldTicketTTLMinutes)
 
 	for _, seatID := range reqTicket.IDSeats {
 		snipeKey := fmt.Sprintf("showtime:%d:seat:%d", reqTicket.IDShowtime, seatID)
 
-		acquired, errSetNX := h.redis.SetCacheNX(snipeKey, cartID, ttl)
+		acquired, errSetNX := h.redis.SetCacheNX(snipeKey, cartID, ttl, ctx)
 		if errSetNX != nil {
 			slog.Error("Redis server error during snipe guard", "error", errSetNX)
 			response.Error(w, http.StatusInternalServerError, "Internal Server Error")
@@ -174,16 +195,16 @@ func (h *Handler) HoldTicket(w http.ResponseWriter, r *http.Request) {
 		tickets = append(tickets, ticket)
 
 		keyHoldTicket := h.redis.BuildHoldTicketKey(ticket.ID, ticket.IDShowtime)
-		if errSetHold := h.redis.SetCache(keyHoldTicket, ticket.ID.String(), ttl); errSetHold != nil {
+		if errSetHold := h.redis.SetCache(keyHoldTicket, ticket.ID.String(), ttl, ctx); errSetHold != nil {
 			slog.Error("Failed to set cache", "error", errSetHold, "key", keyHoldTicket)
 		}
 
-		if errAdd := h.redis.SetAdd(cartID, ticket.ID.String()); errAdd != nil {
+		if errAdd := h.redis.SetAdd(cartID, ctx, ticket.ID.String()); errAdd != nil {
 			slog.Error("Failed to add to cart key", "error", errAdd, "cartID", cartID)
 		}
 	}
 
-	if errExpire := h.redis.Expire(cartID, ttl); errExpire != nil {
+	if errExpire := h.redis.Expire(cartID, ttl, ctx); errExpire != nil {
 		slog.Error("Failed to set TTL on cart", "error", errExpire, "cartID", cartID)
 	}
 
@@ -196,7 +217,7 @@ func (h *Handler) HoldTicket(w http.ResponseWriter, r *http.Request) {
 	}
 
 	cacheShowtimeKey := fmt.Sprintf("seats:showtime:%d", reqTicket.IDShowtime)
-	if errDelete := h.redis.DeleteKey(cacheShowtimeKey); errDelete != nil {
+	if errDelete := h.redis.DeleteKey(cacheShowtimeKey, ctx); errDelete != nil {
 		slog.Warn("Failed to invalidate cache", "error", errDelete, "key", cacheShowtimeKey)
 	}
 
@@ -224,7 +245,8 @@ func (h *Handler) CancelTicket(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	errDelete := h.store.DeleteTicket(id)
+	ctx := r.Context()
+	errDelete := h.store.DeleteTicket(ctx, id)
 
 	if errDelete != nil {
 		if errors.Is(errDelete, ErrNotFound) {

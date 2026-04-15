@@ -32,7 +32,8 @@ func NewHandler(s *Store, r *redisclient.Redis) *Hander {
 // @Failure 500 {object} response.ErrorResponse "Internal server error"
 // @Router /admin/seats [get]
 func (h *Hander) GetSeats(w http.ResponseWriter, r *http.Request) {
-	seats, err := h.store.GetAllSeats()
+	ctx := r.Context()
+	seats, err := h.store.GetAllSeats(ctx)
 	if err != nil {
 		slog.Error("Failed to get all seats", "error", err)
 		response.Error(w, http.StatusInternalServerError, "An unexpected error occurred")
@@ -69,7 +70,9 @@ func (h *Hander) InsertSeat(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	id, err := h.store.CreateSeat(seat)
+	ctx := r.Context()
+
+	id, err := h.store.CreateSeat(ctx, seat)
 	if err != nil {
 		response.Error(w, http.StatusInternalServerError, err.Error())
 		return
@@ -100,7 +103,9 @@ func (h *Hander) GetSeatsByAuditorium(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	seats, err := h.store.GetSeatsByAuditorium(id)
+	ctx := r.Context()
+
+	seats, err := h.store.GetSeatsByAuditorium(ctx, id)
 	if err != nil {
 		slog.Error("Failed to get seats", "error", err, "path", r.URL.Path)
 		response.Error(w, http.StatusInternalServerError, "An unexpected error occurred")
@@ -130,12 +135,14 @@ func (h *Hander) GetSeatsByShowtime(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	ctx := r.Context()
+
 	showtimeKey := h.redis.BuildShowtimeSeatsKey(id)
 
-	val, err := h.redis.GetCache(showtimeKey)
+	val, err := h.redis.GetCache(showtimeKey, ctx)
 
 	if errors.Is(err, redisclient.ErrCacheNotFound) {
-		seats, err := h.store.GetSeatsByShowtime(id)
+		seats, err := h.store.GetSeatsByShowtime(ctx, id)
 		if err != nil {
 			slog.Error("Failed to get seats by showtime", "error", err, "showtime", id)
 			response.Error(w, http.StatusInternalServerError, err.Error())
@@ -144,7 +151,7 @@ func (h *Hander) GetSeatsByShowtime(w http.ResponseWriter, r *http.Request) {
 
 		ttl := config.CacheTTLMinutes
 
-		errSetCache := h.redis.SetCache(showtimeKey, seats, ttl)
+		errSetCache := h.redis.SetCache(showtimeKey, seats, ttl, ctx)
 		if errSetCache != nil {
 			slog.Error("Failed to set cache", "error", errSetCache, "key", showtimeKey)
 			response.Error(w, http.StatusInternalServerError, errSetCache.Error())

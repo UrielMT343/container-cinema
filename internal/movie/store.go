@@ -22,7 +22,7 @@ func New(s *database.Service) *Store {
 	return &Store{db: s}
 }
 
-func (s *Store) GetAllMovies(limit int, offset int) (MoviePage, error) {
+func (s *Store) GetAllMovies(ctx context.Context, limit int, offset int) (MoviePage, error) {
 	query := `
 		SELECT * FROM movies
 		LIMIT $1
@@ -57,7 +57,7 @@ func (s *Store) GetAllMovies(limit int, offset int) (MoviePage, error) {
 	return moviePage, nil
 }
 
-func (s *Store) CreateMovie(m models.Movie) (int, error) {
+func (s *Store) CreateMovie(ctx context.Context, m models.Movie) (int, error) {
 	pool := s.db.GetDB()
 
 	query := `
