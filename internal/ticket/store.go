@@ -36,6 +36,7 @@ func (s *Store) CreateTicket(ctx context.Context, tickets []models.Ticket) (inse
 	idUser := tickets[0].IDUser
 	idShowtime := tickets[0].IDShowtime
 	status := tickets[0].Status
+	email := tickets[0].Email
 
 	for _, t := range tickets {
 		ids = append(ids, t.ID)
@@ -57,19 +58,19 @@ func (s *Store) CreateTicket(ctx context.Context, tickets []models.Ticket) (inse
 		WITH input AS (
 			SELECT unnest($1::uuid[]) AS id, unnest($2::int[]) AS id_seat
 		)
-		INSERT INTO tickets (id, id_user, id_showtime, status, id_seat)
-		SELECT i.id, $3, $4, $5, i.id_seat
+		INSERT INTO tickets (id, id_user, id_showtime, status, id_seat, email)
+		SELECT i.id, $3, $4, $5, i.id_seat, $6
 		FROM input i
 		WHERE NOT EXISTS (
 			SELECT 1 FROM tickets t
 			WHERE t.id_showtime = $4
 			AND t.id_seat = ANY($2::int[])
-			AND t.status IN ('SOLD', 'HELD')
+			AND t.status IN ('SOLD', 'HOLD')
 		)
 		RETURNING id;
 	`
 
-	rows, err := tx.Query(ctx, query, ids, seatIDs, idUser, idShowtime, status)
+	rows, err := tx.Query(ctx, query, ids, seatIDs, idUser, idShowtime, status, email)
 	if err != nil {
 		return nil, fmt.Errorf("error executing bulk insert: %w", err)
 	}
@@ -78,6 +79,10 @@ func (s *Store) CreateTicket(ctx context.Context, tickets []models.Ticket) (inse
 	var insertedCount int
 	for rows.Next() {
 		insertedCount++
+	}
+
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("fatal Postgres error: %w", err)
 	}
 
 	if insertedCount == 0 {
@@ -167,14 +172,14 @@ func (s *Store) CheckIfSeatOccupied(ctx context.Context, seatIDs []int, showtime
 
 	query := `
 		SELECT COALESCE(
-  		array_agg(DISTINCT s.number ORDER BY s.number),
-  		ARRAY[]::text[]
+  			array_agg(DISTINCT s.number ORDER BY s.number),
+   			ARRAY[]::text[]
 		) AS occupied_seat_numbers
 		FROM tickets t
 		INNER JOIN seats s ON s.id = t.id_seat
 		WHERE t.id_showtime = $1
-  	AND t.id_seat = ANY($2::int[])
-  	AND t.status IN ('HELD', 'SOLD');
+	  	AND t.id_seat = ANY($2::int[])
+	  	AND t.status IN ('HELD', 'SOLD');
 	`
 	err := pool.QueryRow(ctx, query, showtimeID, seatIDs).Scan(&occupiedSeats)
 	if err != nil {
@@ -186,4 +191,20 @@ func (s *Store) CheckIfSeatOccupied(ctx context.Context, seatIDs []int, showtime
 	}
 
 	return occupiedSeats, nil
+}
+
+func (s *Store) CheckShowtimeExists(ctx context.Context, showtimeID int) (bool, error) {
+	pool := s.db.GetDB()
+
+	var exists bool
+
+	query := `
+		SELECT EXISTS(SELECT 1 FROM showtimes WHERE id = $1);
+	`
+	err := pool.QueryRow(ctx, query, showtimeID).Scan(&exists)
+	if err != nil {
+		return false, err
+	}
+
+	return exists, nil
 }

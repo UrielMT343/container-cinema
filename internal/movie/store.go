@@ -29,7 +29,7 @@ func (s *Store) GetAllMovies(ctx context.Context, limit int, offset int) (MovieP
 		OFFSET $2
 	`
 
-	movies, err := database.QueryRows[models.Movie](s.db, context.Background(), query, limit, offset)
+	movies, err := database.QueryRows[models.Movie](s.db, ctx, query, limit, offset)
 	if err != nil {
 		return MoviePage{}, fmt.Errorf("error while running the query: %v", err)
 	}
@@ -66,7 +66,7 @@ func (s *Store) CreateMovie(ctx context.Context, m models.Movie) (int, error) {
 		RETURNING id
 	`
 
-	err := pool.QueryRow(context.Background(), query, m.Name, m.DurationMin, m.Synopsis).Scan(&m.ID)
+	err := pool.QueryRow(ctx, query, m.Name, m.DurationMin, m.Synopsis).Scan(&m.ID)
 	if err != nil {
 		return 0, fmt.Errorf("error while running the query: %v", err)
 	}

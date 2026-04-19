@@ -26,9 +26,10 @@ type Handler struct {
 }
 
 type ReqTicket struct {
-	IDUser     int   `json:"idUser"`
-	IDShowtime int   `json:"idShowtime"`
-	IDSeats    []int `json:"idSeats"`
+	IDUser     *int    `json:"idUser,omitempty"`
+	Email      *string `json:"email,omitempty"`
+	IDShowtime int     `json:"idShowtime"`
+	IDSeats    []int   `json:"idSeats"`
 }
 
 func NewHandler(st *Store, q *rabbitmq.RabbitMQ, r *redisclient.Redis) *Handler {
@@ -128,6 +129,19 @@ func (h *Handler) HoldTicket(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		slog.Error("Bad request payload", "error", err, "path", r.URL.Path)
 		response.Error(w, http.StatusBadRequest, "Invalid request payload")
+		return
+	}
+
+	showtimeExists, err := h.store.CheckShowtimeExists(ctx, reqTicket.IDShowtime)
+	if err != nil {
+		slog.Error("Database failed to verify showtime", "error", err)
+		response.Error(w, http.StatusInternalServerError, "Failed to verify showtime availability")
+		return
+	}
+
+	if !showtimeExists {
+		slog.Warn("User attempted to book tickets for a non-existent showtime", "showtimeID", reqTicket.IDShowtime)
+		response.Error(w, http.StatusNotFound, "The selected showtime does not exist")
 		return
 	}
 

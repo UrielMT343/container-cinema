@@ -35,12 +35,12 @@ CREATE TABLE IF NOT EXISTS "users" (
 );
 
 CREATE TABLE IF NOT EXISTS "tickets" (
-	"id" UUID NOT NULL UNIQUE,
-	"id_user" INTEGER,
+	"id" UUID PRIMARY KEY,
+	"id_user" INTEGER NULL,
 	"id_showtime" INTEGER,
 	"status" TEXT,
 	"id_seat" INTEGER,
-	PRIMARY KEY("id")
+	"email" TEXT NULL
 );
 
 CREATE TABLE IF NOT EXISTS "showtimes" (
@@ -85,3 +85,15 @@ ON UPDATE NO ACTION ON DELETE NO ACTION;
 ALTER TABLE "tickets"
 ADD CONSTRAINT unique_showtime_seat
 UNIQUE ("id_showtime", "id_seat");
+
+-- First, drop the old constraint (assuming it was named something like this, check your DB for the exact name if it fails)
+ALTER TABLE "tickets" DROP CONSTRAINT IF EXISTS "tickets_check";
+
+-- Add the new, ultra-smart constraint
+ALTER TABLE "tickets"
+ADD CONSTRAINT "require_identity_on_checkout"
+CHECK (
+    ("status" = 'HOLD') -- If it's just held, allow nulls!
+    OR
+    ("status" = 'SOLD' AND ("id_user" IS NOT NULL OR "email" IS NOT NULL)) -- If sold, demand identity!
+);
