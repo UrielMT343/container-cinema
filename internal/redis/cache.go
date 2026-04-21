@@ -103,3 +103,11 @@ func (client *Redis) SetMembers(key string, ctx context.Context) ([]string, erro
 
 	return members, nil
 }
+
+func (client *Redis) IncrBy(key string, value int64, ctx context.Context) (int64, error) {
+	return client.Client.IncrBy(ctx, key, value).Result()
+}
+
+func (client *Redis) DecrBy(key string, value int64, ctx context.Context) (int64, error) {
+	return client.Client.DecrBy(ctx, key, value).Result()
+}

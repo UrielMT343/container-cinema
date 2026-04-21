@@ -4,14 +4,20 @@ WORKDIR /src
 
 COPY go.mod go.sum ./
 
-RUN go mod download
+RUN --mount=type=cache,target=/go/pkg/mod go mod download
 
 COPY . .
 
-RUN CGO_ENABLED=0 GOOS=linux go build -o /api ./cmd/api
+RUN --mount=type=cache,target=/go/pkg/mod \
+  --mount=type=cache,target=/root/.cache/go-build \
+  CGO_ENABLED=0 GOOS=linux go build -trimpath -ldflags="-s -w" -o /api ./cmd/api
 
-FROM alpine:3.19
+FROM gcr.io/distroless/static-debian12:nonroot
+
+USER 65532:65532
 
 COPY --from=build /api /api
+
+EXPOSE 8080
 
 CMD ["/api"]

@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"log/slog"
 	"net/http"
-	"strings"
 	"time"
 
 	"start/internal/auth"
@@ -32,6 +31,11 @@ type ReqTicket struct {
 	IDSeats    []int   `json:"idSeats"`
 }
 
+type ReqConfirm struct {
+	TicketIDs []string `json:"ticketIds"`
+	Email     *string  `json:"email,omitempty"`
+}
+
 func NewHandler(st *Store, q *rabbitmq.RabbitMQ, r *redisclient.Redis) *Handler {
 	return &Handler{store: st, queue: q, redis: r}
 }
@@ -55,30 +59,39 @@ func (h *Handler) ConfirmTicket(w http.ResponseWriter, r *http.Request) {
 
 	ctx := r.Context()
 
-	ticketIDsStr, err := h.redis.SetMembers(cartID, ctx)
-	if err != nil {
-		slog.Error("Failed to retrieve cart items", "error", err)
-		response.Error(w, http.StatusInternalServerError, "Cart items lost")
+	var req ReqConfirm
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		response.Error(w, http.StatusBadRequest, "Invalid request payload")
+		return
+	}
+
+	if len(req.TicketIDs) == 0 {
+		response.Error(w, http.StatusBadRequest, "No tickets provided for checkout")
 		return
 	}
 
 	var ticketUUIDSlice []uuid.UUID
-
-	for _, s := range ticketIDsStr {
-		id, err := uuid.Parse(s)
+	for _, idStr := range req.TicketIDs {
+		parsedID, err := uuid.Parse(idStr)
 		if err != nil {
-			slog.Error("Failed to parse the ticket ID", "error", err, "ticketID", s)
-			response.Error(w, http.StatusBadRequest, "Invalid ticket ID")
+			slog.Error("Frontend sent an invalid UUID string", "error", err, "bad_id", idStr)
+
+			errorMsg := fmt.Sprintf("Invalid ticket ID format: %s", idStr)
+			response.Error(w, http.StatusBadRequest, errorMsg)
 			return
 		}
-
-		ticketUUIDSlice = append(ticketUUIDSlice, id)
+		ticketUUIDSlice = append(ticketUUIDSlice, parsedID)
 	}
 
-	updatedTickets, errUpdate := h.store.UpdateTicketStatuses(ctx, "SOLD", ticketUUIDSlice)
+	updatedTickets, errUpdate := h.store.UpdateTicketStatuses(ctx, ticketUUIDSlice, req.Email)
 	if errUpdate != nil {
 		slog.Error("Failed to updated tickets", "error", errUpdate)
 		response.Error(w, http.StatusInternalServerError, "An unexpected error occurred")
+		return
+	}
+
+	if len(updatedTickets) == 0 {
+		response.Error(w, http.StatusConflict, "Tickets expired or already sold")
 		return
 	}
 
@@ -91,13 +104,8 @@ func (h *Handler) ConfirmTicket(w http.ResponseWriter, r *http.Request) {
 		slog.Warn("Failed to invalidate cache", "error", errDelete, "key", cacheShowtimeKey)
 	}
 
-	for _, ticket := range updatedTickets {
-		cacheHoldKey := h.redis.BuildHoldTicketKey(ticket.ID, ticket.IDShowtime)
-		errDeleteHold := h.redis.DeleteKey(cacheHoldKey, ctx)
-		if errDeleteHold != nil {
-			slog.Warn("Failed to invalidate cache", "error", errDeleteHold, "key", cacheHoldKey)
-		}
-	}
+	cartLimitKey := h.redis.BuildCartLimitKey(cartID)
+	_ = h.redis.DeleteKey(cartLimitKey, ctx)
 
 	response.Respond(w, http.StatusOK, updatedTickets)
 }
@@ -152,50 +160,45 @@ func (h *Handler) HoldTicket(w http.ResponseWriter, r *http.Request) {
 	}
 
 	seatLimit := int64(config.SeatsLimit)
-	currentSeats, _ := h.redis.SetCardinality(cartID, ctx)
 
-	if currentSeats+requestedSeats > seatLimit {
-		slog.Error("Too many seats taken", "current", currentSeats, "requested", requestedSeats)
+	cartLimitKey := h.redis.BuildCartLimitKey(cartID)
+
+	newTotal, errIncr := h.redis.IncrBy(cartLimitKey, requestedSeats, ctx)
+	if errIncr != nil {
+		slog.Error("Failed to increment cart limit in Redis", "error", errIncr)
+		response.Error(w, http.StatusInternalServerError, "Failed to verify cart limits")
+		return
+	}
+
+	if newTotal > seatLimit {
+		_, _ = h.redis.DecrBy(cartLimitKey, requestedSeats, ctx)
+
+		slog.Warn("Seat limit exceeded", "current_total_attempted", newTotal, "limit", seatLimit)
 		message := fmt.Sprintf("You can only hold %d seats at a time.", seatLimit)
 		response.Error(w, http.StatusBadRequest, message)
 		return
 	}
 
-	occupiedSeats, errSeats := h.store.CheckIfSeatOccupied(ctx, reqTicket.IDSeats, reqTicket.IDShowtime)
-	if errSeats != nil {
-		slog.Error("Error while getting the occupied seats", "error", errSeats)
-		response.Error(w, http.StatusInternalServerError, "Cart ID lost in transit")
-		return
-	}
+	snipeTTL := 5 * time.Second
 
-	if len(occupiedSeats) > 0 {
-		slog.Warn("User attempted to book occupied seats", "occupiedSeats", occupiedSeats)
+	for _, seatID := range reqTicket.IDSeats {
+		snipeKey := h.redis.BuildSeatsCheckKey(reqTicket.IDShowtime, seatID)
 
-		var strSeats []string
-		strSeats = append(strSeats, occupiedSeats...)
-		errorMsg := fmt.Sprintf("The following seats are already taken: %s", strings.Join(strSeats, ", "))
+		acquired, errSetNX := h.redis.SetCacheNX(snipeKey, cartID, snipeTTL, ctx)
+		if errSetNX != nil {
+			slog.Error("Redis server error during snipe guard", "error", errSetNX)
+			response.Error(w, http.StatusInternalServerError, "An unexpected error occurred")
+			return
+		}
 
-		response.Error(w, http.StatusConflict, errorMsg)
-		return
+		if !acquired {
+			slog.Warn("Seat snipe attempt blocked by Redis", "seat", seatID, "cart", cartID)
+			response.Error(w, http.StatusConflict, fmt.Sprintf("Seat %d is currently being purchased by someone else!", seatID))
+			return
+		}
 	}
 
 	ttl := time.Duration(config.HoldTicketTTLMinutes)
-
-	for _, seatID := range reqTicket.IDSeats {
-		snipeKey := fmt.Sprintf("showtime:%d:seat:%d", reqTicket.IDShowtime, seatID)
-
-		acquired, errSetNX := h.redis.SetCacheNX(snipeKey, cartID, ttl, ctx)
-		if errSetNX != nil {
-			slog.Error("Redis server error during snipe guard", "error", errSetNX)
-			response.Error(w, http.StatusInternalServerError, "Internal Server Error")
-			return
-		}
-		if !acquired {
-			slog.Warn("Seat snipe attempt blocked", "seat", seatID, "cart", cartID)
-			response.Error(w, http.StatusConflict, fmt.Sprintf("Seat %d was just taken!", seatID))
-			return
-		}
-	}
 
 	var tickets []models.Ticket
 	for _, seatID := range reqTicket.IDSeats {
@@ -207,24 +210,30 @@ func (h *Handler) HoldTicket(w http.ResponseWriter, r *http.Request) {
 			IDSeat:     seatID,
 		}
 		tickets = append(tickets, ticket)
-
-		keyHoldTicket := h.redis.BuildHoldTicketKey(ticket.ID, ticket.IDShowtime)
-		if errSetHold := h.redis.SetCache(keyHoldTicket, ticket.ID.String(), ttl, ctx); errSetHold != nil {
-			slog.Error("Failed to set cache", "error", errSetHold, "key", keyHoldTicket)
-		}
-
-		if errAdd := h.redis.SetAdd(cartID, ctx, ticket.ID.String()); errAdd != nil {
-			slog.Error("Failed to add to cart key", "error", errAdd, "cartID", cartID)
-		}
 	}
 
 	if errExpire := h.redis.Expire(cartID, ttl, ctx); errExpire != nil {
 		slog.Error("Failed to set TTL on cart", "error", errExpire, "cartID", cartID)
 	}
 
-	body, err := json.Marshal(tickets)
+	insertedTickets, errInsert := h.store.CreateTickets(ctx, tickets)
+	if errInsert != nil {
+		if errors.Is(errInsert, ErrInsertConflict) {
+			slog.Error("Database rejected ticket insert", "error", errInsert)
+			response.Error(w, http.StatusConflict, ErrInsertConflict.Error())
+			return
+		} else {
+			_, _ = h.redis.DecrBy(cartLimitKey, requestedSeats, ctx)
+
+			slog.Error("Error while inserting the tickets", "error", errInsert)
+			response.Error(w, http.StatusInternalServerError, "An unexpected error occurred")
+			return
+		}
+	}
+
+	body, err := json.Marshal(insertedTickets)
 	if err == nil {
-		errPublish := h.queue.PublishTicket(body)
+		errPublish := h.queue.PublishHoldTicket(body, ttl)
 		if errPublish != nil {
 			slog.Error("Failed to publish to queue", "error", errPublish)
 		}

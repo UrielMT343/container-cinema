@@ -7,8 +7,6 @@ import (
 	"net/http"
 	"os"
 	"os/signal"
-	"strconv"
-	"strings"
 	"syscall"
 	"time"
 
@@ -20,8 +18,6 @@ import (
 	"start/internal/showtime"
 	"start/internal/ticket"
 	"start/internal/user"
-
-	"github.com/google/uuid"
 )
 
 // @title           Cloud Cinema API
@@ -69,6 +65,13 @@ func main() {
 	if err != nil {
 		slog.Error("Critical startup error", "error", err)
 		os.Exit(1)
+	}
+
+	errSetup := queue.SetupHoldTopology()
+	if errSetup != nil {
+		slog.Error("Critical startup error", "error", errSetup)
+		os.Exit(1)
+
 	}
 
 	redisUser := os.Getenv("REDIS_USER")
@@ -121,44 +124,7 @@ func main() {
 
 	handler := routes(cfg, basePrefix, tokenSecret)
 
-	go queue.ConsumeTicket(rootCtx, ticketStore.CreateTicket, rdb)
-
-	go rdb.ListenForTicketExpirations(rootCtx, func(expiredKey string) {
-		parts := strings.Split(expiredKey, ":")
-		if len(parts) != 4 {
-			slog.Warn("Unknown key format expired:", "expiredKey", expiredKey)
-			return
-		}
-
-		showtimeIDStr := parts[2]
-		ticketIDStr := parts[3]
-
-		ticketUUID, err := uuid.Parse(ticketIDStr)
-		if err != nil {
-			slog.Error("Failed to parse the ticket", "ticket", ticketIDStr)
-			return
-		}
-
-		errDeleteTicket := ticketStore.DeleteTicket(rootCtx, ticketUUID)
-		if errDeleteTicket != nil {
-			slog.Error("Failed to delete the ticket", "ticket", ticketUUID)
-			return
-		}
-		slog.Info("Ticket deleted by timeout", "ticket", ticketIDStr)
-
-		idShowtime, err := strconv.Atoi(showtimeIDStr)
-		if err != nil {
-			slog.Error("Failed to cast showtime ID to string", "showtimeID", showtimeIDStr)
-			return
-		}
-
-		cacheShowtimeKey := rdb.BuildShowtimeSeatsKey(idShowtime)
-
-		errDeleteKey := rdb.DeleteKey(cacheShowtimeKey, rootCtx)
-		if errDeleteKey != nil {
-			slog.Warn("Failed to invalidate cache", "showtimeKey", cacheShowtimeKey, "error", errDeleteKey)
-		}
-	})
+	go queue.CleanupDLXTickets(rootCtx, ticketStore.DeleteTicket, rdb)
 
 	apiPort := os.Getenv("API_PORT")
 

@@ -17,3 +17,11 @@ func (client *Redis) BuildShowtimeSeatsKey(idShowtime int) string {
 func (client *Redis) BuildCartKey(cartIDstr string) string {
 	return fmt.Sprintf("cart_%s", cartIDstr)
 }
+
+func (client *Redis) BuildSeatsCheckKey(idShowtime int, idSeat int) string {
+	return fmt.Sprintf("showtime:%d:seat:%d", idShowtime, idSeat)
+}
+
+func (client *Redis) BuildCartLimitKey(cartIDstr string) string {
+	return fmt.Sprintf("cart:%s:count", cartIDstr)
+}

@@ -4,44 +4,40 @@ import (
 	"context"
 	"fmt"
 	"log/slog"
+	"strconv"
 	"time"
 
 	amqp "github.com/rabbitmq/amqp091-go"
 )
 
-func (q *RabbitMQ) PublishTicket(body []byte) (err error) {
-	ch, err := q.queue.Channel()
-	if err != nil {
-		return fmt.Errorf("error opening channel: %v", err)
-	}
+func (q *RabbitMQ) PublishHoldTicket(body []byte, ttl time.Duration) (err error) {
+	q.Lock()
+	defer q.Unlock()
 
-	defer func() {
-		closeErr := ch.Close()
-		if closeErr != nil {
-			if err == nil {
-				err = closeErr
-			} else {
-				err = fmt.Errorf("%v; close error: %v", err, closeErr)
-			}
-		}
-	}()
+	ttlMs := strconv.FormatInt(ttl.Milliseconds(), 10)
 
-	qd, err := ch.QueueDeclare("ticket", true, false, false, false, amqp.Table{amqp.QueueTypeArg: amqp.QueueTypeQuorum})
-	if err != nil {
-		return fmt.Errorf("error while declaring the queue: %v", err)
-	}
+	slog.Info("Ticket received on RabbitMQ", "size", len(body), "ttl ms", ttlMs)
 
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 
-	err = ch.PublishWithContext(ctx, "", qd.Name, false, false, amqp.Publishing{
-		ContentType: "application/json",
-		Body:        body,
-	})
+	err = q.pubChannel.PublishWithContext(
+		ctx,
+		"ticket.hold.exchange",
+		"ticket.hold.created",
+		false,
+		false,
+		amqp.Publishing{
+			ContentType:  "application/json",
+			DeliveryMode: amqp.Persistent,
+			Body:         body,
+			Expiration:   ttlMs,
+			Timestamp:    time.Now(),
+		},
+	)
 	if err != nil {
-		return fmt.Errorf("error publishing the ticket: %v", err)
+		return fmt.Errorf("error publishing hold ticket: %w", err)
 	}
 
-	slog.Info("Message published", "queue", qd.Name)
 	return nil
 }

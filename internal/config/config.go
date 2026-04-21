@@ -14,6 +14,8 @@ var CartIDCookieTTLMinutes = getEnvAsDurationMinutes("CARTID_COOKIE_TTL_MINUTES"
 
 var SeatsLimit = getEnvAsInt("SEATS_LIMIT", 5)
 
+var WorkerCount = getEnvAsInt("WORKER_COUNT", 5)
+
 func getEnvAsDurationMinutes(key string, defaultMinutes int) time.Duration {
 	valueStr := os.Getenv(key)
 	if valueStr == "" {
@@ -36,7 +38,7 @@ func getEnvAsInt(key string, defaultValue int) int {
 
 	value, err := strconv.Atoi(valueStr)
 	if err != nil {
-		return  defaultValue
+		return defaultValue
 	}
 
 	return value

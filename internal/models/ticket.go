@@ -9,12 +9,14 @@ import (
 
 type Ticket struct {
 	ID         uuid.UUID `db:"id" json:"id"`
-	IDUser     *int       `db:"id_user" json:"idUser"`
+	IDUser     *int      `db:"id_user" json:"idUser"`
 	IDShowtime int       `db:"id_showtime" json:"idShowtime"`
 	Status     string    `db:"status" json:"status"`
 	IDSeat     int       `db:"is_seat" json:"idSeat"`
 	Email      *string   `json:"email,omitempty" db:"email"`
 }
+
+var ErrorTicketNotHeld = errors.New("ticket not held")
 
 func (t *Ticket) Validate() error {
 	var errs []string

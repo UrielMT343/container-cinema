@@ -3,16 +3,20 @@ package rabbitmq
 import (
 	"context"
 	"encoding/json"
+	"errors"
+	"fmt"
 	"log/slog"
 	"time"
 
+	"start/internal/config"
 	"start/internal/models"
 	redisclient "start/internal/redis"
 
-	amqp "github.com/rabbitmq/amqp091-go"
+	"github.com/google/uuid"
+	"golang.org/x/sync/errgroup"
 )
 
-func (q *RabbitMQ) ConsumeTicket(ctx context.Context, insertTicketsToDB func(ctx context.Context, tickets []models.Ticket) ([]models.Ticket, error), rdb *redisclient.Redis) {
+func (q *RabbitMQ) CleanupDLXTickets(ctx context.Context, deleteTicketsFromDB func(ctx context.Context, ticketID uuid.UUID) error, rdb *redisclient.Redis) {
 	ch, err := q.NewChannel()
 	if err != nil {
 		return
@@ -24,72 +28,88 @@ func (q *RabbitMQ) ConsumeTicket(ctx context.Context, insertTicketsToDB func(ctx
 		}
 	}()
 
-	qd, err := ch.QueueDeclare("ticket", true, false, false, false, amqp.Table{amqp.QueueTypeArg: amqp.QueueTypeQuorum})
-	if err != nil {
+	workerCount := config.WorkerCount
+
+	errQos := ch.Qos(workerCount, 0, false)
+	if errQos != nil {
+		slog.Error("Failed to set channel prefetch", "error", errQos)
 		return
 	}
 
-	msgs, err := ch.Consume(qd.Name, "", false, false, false, false, nil)
-	if err != nil {
+	msgs, errConsume := ch.ConsumeWithContext(ctx, "ticket.hold.cleanup.queue", "cleanup-consumer",
+		false, false, false, false, nil)
+	if errConsume != nil {
 		return
 	}
 
-	listening := make(chan struct{})
+	eg, groupCtx := errgroup.WithContext(ctx)
 
-	go func() {
-		for m := range msgs {
-			slog.Info("Message received", "body_len", len(m.Body))
+	for i := 0; i < workerCount; i++ {
+		eg.Go(func() (err error) {
+			defer func() {
+				if r := recover(); r != nil {
+					slog.Error("Worker paccked!", "panic", r)
+					err = fmt.Errorf("worker panic: %v", r)
+				}
+			}()
 
-			var tickets []models.Ticket
+			for m := range msgs {
+				var tickets []models.Ticket
 
-			err := json.Unmarshal(m.Body, &tickets)
-			if err != nil {
-				slog.Error("Error while formating the JSON", "error", err)
-				errNack := m.Nack(false, false)
-				if errNack != nil {
+				err := json.Unmarshal(m.Body, &tickets)
+				if err != nil {
+					slog.Error("Error while formating the JSON", "error", err)
+					_ = m.Nack(false, false)
 					continue
 				}
 
-				continue
-			}
+				if len(tickets) == 0 {
+					slog.Warn("Received empty ticket array")
+					_ = m.Ack(false)
+					continue
+				}
 
-			if len(tickets) == 0 {
-				slog.Warn("Received empty ticket array")
+				var fatalError bool
+
+				for _, ticket := range tickets {
+					ctxDelete, cancel := context.WithTimeout(groupCtx, 5*time.Second)
+					err = deleteTicketsFromDB(ctxDelete, ticket.ID)
+					cancel()
+					if err != nil {
+						if errors.Is(err, models.ErrorTicketNotHeld) {
+							slog.Info("Ticket paid or already freed, skipping", "id", ticket.ID)
+							continue
+						} else {
+							slog.Error("Error deleting ticket from DB", "error", err)
+							_ = m.Nack(false, true)
+							fatalError = true
+							break
+						}
+					}
+				}
+
+				if fatalError {
+					return err
+				}
+
+				slog.Info("Ticket deleted by timeout", "count", len(tickets))
 				errAck := m.Ack(false)
 				if errAck != nil {
-					continue
-				}
-				continue
-			}
-
-			ctxInsert, cancel := context.WithTimeout(ctx, 5*time.Second)
-			_, err = insertTicketsToDB(ctxInsert, tickets)
-			cancel()
-			if err != nil {
-				slog.Error("Error inserting tickets to DB:", "error", err)
-				errNack := m.Nack(false, true)
-				if errNack != nil {
-					continue
+					slog.Error("Failed to Ack message", "error", errAck)
+					return err
 				}
 
-				continue
+				cacheShowtimeKey := rdb.BuildShowtimeSeatsKey(tickets[0].IDShowtime)
+
+				errDeleteKey := rdb.DeleteKey(cacheShowtimeKey, ctx)
+				if errDeleteKey != nil {
+					slog.Warn("Failed to invalidate cache", "showtimeKey", cacheShowtimeKey, "error", errDeleteKey)
+				}
 			}
-
-			showtimeKey := rdb.BuildShowtimeSeatsKey(tickets[0].IDShowtime)
-
-			errDelete := rdb.DeleteKey(showtimeKey, ctx)
-			if errDelete != nil {
-				slog.Warn("Failed to clear cache", "key", showtimeKey)
-			}
-
-			slog.Info("Bulk tickets successfully processed", "count", len(tickets))
-			errAck := m.Ack(false)
-			if errAck != nil {
-				continue
-			}
-		}
-	}()
-
-	slog.Info("Waiting for messages")
-	<-listening
+			return nil
+		})
+	}
+	if err := eg.Wait(); err != nil {
+		slog.Error("Worker pool shut down with error", "error", err)
+	}
 }

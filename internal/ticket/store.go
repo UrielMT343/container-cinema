@@ -23,7 +23,9 @@ func New(s *database.Service) *Store {
 
 var ErrNotFound = errors.New("ticket not found")
 
-func (s *Store) CreateTicket(ctx context.Context, tickets []models.Ticket) (insertedTickets []models.Ticket, err error) {
+var ErrInsertConflict error
+
+func (s *Store) CreateTickets(ctx context.Context, tickets []models.Ticket) (insertedTickets []models.Ticket, err error) {
 	if len(tickets) == 0 {
 		return nil, nil
 	}
@@ -86,7 +88,9 @@ func (s *Store) CreateTicket(ctx context.Context, tickets []models.Ticket) (inse
 	}
 
 	if insertedCount == 0 {
-		return nil, fmt.Errorf("conflict: one or more seats in %v are already taken or held", seatIDs)
+		strError := fmt.Sprintf("conflict: one or more seats in %d are already taken or held", seatIDs)
+		ErrInsertConflict = errors.New(strError)
+		return nil, ErrInsertConflict
 	}
 
 	errCommit := tx.Commit(ctx)
@@ -97,8 +101,8 @@ func (s *Store) CreateTicket(ctx context.Context, tickets []models.Ticket) (inse
 	return tickets, nil
 }
 
-func (s *Store) UpdateTicketStatuses(ctx context.Context, status string, ids []uuid.UUID) ([]models.Ticket, error) {
-	if len(ids) == 0 {
+func (s *Store) UpdateTicketStatuses(ctx context.Context, ticketIDs []uuid.UUID, email *string) ([]models.Ticket, error) {
+	if len(ticketIDs) == 0 {
 		return nil, nil
 	}
 
@@ -106,12 +110,13 @@ func (s *Store) UpdateTicketStatuses(ctx context.Context, status string, ids []u
 
 	query := `
 		UPDATE tickets
-		SET status = $1
+		SET status = 'SOLD',
+			email = COALESCE($1, email)
 		WHERE id = ANY($2::uuid[])
-		RETURNING id, id_user, id_showtime, status, id_seat;
+		RETURNING *;
 	`
 
-	rows, err := pool.Query(ctx, query, status, ids)
+	rows, err := pool.Query(ctx, query, email, ticketIDs)
 	if err != nil {
 		return nil, fmt.Errorf("error executing bulk update: %w", err)
 	}
@@ -121,7 +126,7 @@ func (s *Store) UpdateTicketStatuses(ctx context.Context, status string, ids []u
 
 	for rows.Next() {
 		var t models.Ticket
-		err := rows.Scan(&t.ID, &t.IDUser, &t.IDShowtime, &t.Status, &t.IDSeat)
+		err := rows.Scan(&t.ID, &t.IDUser, &t.IDShowtime, &t.Status, &t.IDSeat, &t.Email)
 		if err != nil {
 			return nil, fmt.Errorf("error scanning updated ticket row: %w", err)
 		}
@@ -132,8 +137,8 @@ func (s *Store) UpdateTicketStatuses(ctx context.Context, status string, ids []u
 		return nil, fmt.Errorf("error iterating over updated rows: %w", err)
 	}
 
-	if len(updatedTickets) != len(ids) {
-		slog.Warn("Mismatch in updated tickets", "requested", len(ids), "updated", len(updatedTickets))
+	if len(updatedTickets) != len(ticketIDs) {
+		slog.Warn("Mismatch in updated tickets", "requested", len(ticketIDs), "updated", len(updatedTickets))
 	}
 
 	return updatedTickets, nil
@@ -155,7 +160,7 @@ func (s *Store) DeleteTicket(ctx context.Context, id uuid.UUID) error {
 
 	rows := tag.RowsAffected()
 	if rows == 0 {
-		return ErrNotFound
+		return models.ErrorTicketNotHeld
 	}
 
 	return nil
