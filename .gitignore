@@ -4,3 +4,4 @@
 secret.yaml
 /requests
 /scripts
+certbot/

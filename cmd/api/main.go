@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"flag"
 	"fmt"
 	"log/slog"
 	"net/http"
@@ -21,11 +22,32 @@ import (
 )
 
 // @title           Cloud Cinema API
-// @version         2.0
+// @version         1.0
 // @description     This is the distributed backend for the Cloud Cinema ticket booking system.
-// @host            localhost:8080
+// @host            localhost
 // @BasePath        /api/v1
+// @schemes         https
 func main() {
+	isHealthCheck := flag.Bool("healthcheck", false, "Run internal container healthcheck")
+	flag.Parse()
+
+	if *isHealthCheck {
+		apiPort := os.Getenv("API_PORT")
+		if apiPort == "" {
+			apiPort = "8080"
+		}
+
+		url := fmt.Sprintf("http://localhost:%s/health", apiPort)
+		client := http.Client{Timeout: 2 * time.Second}
+
+		resp, err := client.Get(url)
+		if err != nil || resp.StatusCode != http.StatusOK {
+			os.Exit(1)
+		}
+
+		os.Exit(0)
+	}
+
 	logger := slog.New(slog.NewJSONHandler(os.Stdout, nil))
 	slog.SetDefault(logger)
 
@@ -35,13 +57,13 @@ func main() {
 	defer stopCtx()
 
 	pgUser := os.Getenv("POSTGRES_USER")
-	pass := os.Getenv("POSTGRES_PASSWORD")
-	host := os.Getenv("DATABASE_HOST")
-	port := os.Getenv("POSTGRES_PORT")
-	db := os.Getenv("POSTGRES_DB")
+	pgPass := os.Getenv("POSTGRES_PASSWORD")
+	pgHost := os.Getenv("DATABASE_HOST")
+	pgPort := os.Getenv("POSTGRES_PORT")
+	pgDB := os.Getenv("POSTGRES_DB")
 
 	url := fmt.Sprintf("postgres://%s:%s@%s:%s/%s",
-		pgUser, pass, host, port, db,
+		pgUser, pgPass, pgHost, pgPort, pgDB,
 	)
 	service, err := database.NewConnection(rootCtx, url)
 	if err != nil {

@@ -4,6 +4,7 @@ import (
 	"net/http"
 	"strings"
 
+	"start/internal/health"
 	"start/internal/middleware"
 	"start/internal/movie"
 	"start/internal/seat"
@@ -26,6 +27,7 @@ type Config struct {
 
 func routes(c *Config, basePrefix string, secret string) http.Handler {
 	mainMux := http.NewServeMux()
+	mainMux.HandleFunc("GET /health", health.HealthCheck)
 
 	apiMux := http.NewServeMux()
 
@@ -38,7 +40,6 @@ func routes(c *Config, basePrefix string, secret string) http.Handler {
 	publicMux.HandleFunc("GET /seats/showtime/{id}", c.seatHandler.GetSeatsByShowtime)
 	publicMux.HandleFunc("POST /login", c.userHandler.LoginUser)
 	publicMux.HandleFunc("POST /checkout/begin", c.ticketHandler.BeginCheckout)
-
 	adminMux.HandleFunc("GET /movies", c.movieHanlder.GetMovies)
 	adminMux.HandleFunc("POST /movies", c.movieHanlder.InsertMovie)
 	adminMux.HandleFunc("POST /seats", c.seatHandler.InsertSeat)
