@@ -63,7 +63,7 @@ func (s *Store) GetSeatsByAuditorium(ctx context.Context, idAuditorium int) ([]m
 	return seats, nil
 }
 
-func (s *Store) GetSeatsByShowtime(ctx context.Context, idShowtime int) ([]models.ShowtimeSeat, error) {
+func (s *Store) GetSeatsByShowtime(ctx context.Context, idShowtime int) ([]SeatDetailResponse, error) {
 	query := `
 		SELECT
 		    s.id AS id,
@@ -75,7 +75,7 @@ func (s *Store) GetSeatsByShowtime(ctx context.Context, idShowtime int) ([]model
 		WHERE st.id = $1;
 	`
 
-	seats, err := database.QueryRows[models.ShowtimeSeat](s.db, ctx, query, idShowtime)
+	seats, err := database.QueryRows[SeatDetailResponse](s.db, ctx, query, idShowtime)
 	if err != nil {
 		return nil, fmt.Errorf("error while obtaining the seats: %v", err)
 	}

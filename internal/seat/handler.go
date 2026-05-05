@@ -1,11 +1,13 @@
 package seat
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
 	"log/slog"
 	"net/http"
 	"strconv"
+	"time"
 
 	"start/internal/config"
 	"start/internal/models"
@@ -13,13 +15,32 @@ import (
 	"start/internal/response"
 )
 
-type Hander struct {
-	store *Store
-	redis *redisclient.Redis
+type SeatDetailResponse struct {
+	ID     int    `json:"id"`
+	Number string `json:"number"`
+	Status string `json:"status"`
 }
 
-func NewHandler(s *Store, r *redisclient.Redis) *Hander {
-	return &Hander{store: s, redis: r}
+type seatStore interface {
+	GetAllSeats(ctx context.Context) ([]models.Seat, error)
+	CreateSeat(ctx context.Context, seat models.Seat) (int, error)
+	GetSeatsByAuditorium(ctx context.Context, idAuditorium int) ([]models.Seat, error)
+	GetSeatsByShowtime(ctx context.Context, idShowtiem int) ([]SeatDetailResponse, error)
+}
+
+type cacheService interface {
+	GetCache(key string, ctx context.Context) (string, error)
+    SetCache(key string, value any, ttl time.Duration, ctx context.Context) error
+    BuildShowtimeSeatsKey(idShowtime int) string
+}
+
+type Hander struct {
+	store seatStore
+	cache cacheService
+}
+
+func NewHandler(s seatStore, c cacheService) *Hander {
+	return &Hander{store: s, cache: c}
 }
 
 // GetSeats retrieves all seats
@@ -137,21 +158,21 @@ func (h *Hander) GetSeatsByShowtime(w http.ResponseWriter, r *http.Request) {
 
 	ctx := r.Context()
 
-	showtimeKey := h.redis.BuildShowtimeSeatsKey(id)
+	showtimeKey := h.cache.BuildShowtimeSeatsKey(id)
 
-	val, err := h.redis.GetCache(showtimeKey, ctx)
+	val, err := h.cache.GetCache(showtimeKey, ctx)
 
 	if errors.Is(err, redisclient.ErrCacheNotFound) {
-		seats, err := h.store.GetSeatsByShowtime(ctx, id)
-		if err != nil {
-			slog.Error("Failed to get seats by showtime", "error", err, "showtime", id)
-			response.Error(w, http.StatusInternalServerError, err.Error())
+		seats, errGet := h.store.GetSeatsByShowtime(ctx, id)
+		if errGet != nil {
+			slog.Error("Failed to get seats by showtime", "error", errGet, "showtime", id)
+			response.Error(w, http.StatusInternalServerError, "An unexpeced error ocurred")
 			return
 		}
 
 		ttl := config.CacheTTLMinutes
 
-		errSetCache := h.redis.SetCache(showtimeKey, seats, ttl, ctx)
+		errSetCache := h.cache.SetCache(showtimeKey, seats, ttl, ctx)
 		if errSetCache != nil {
 			slog.Error("Failed to set cache", "error", errSetCache, "key", showtimeKey)
 			response.Error(w, http.StatusInternalServerError, errSetCache.Error())

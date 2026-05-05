@@ -44,11 +44,11 @@ func (q *RabbitMQ) CleanupDLXTickets(ctx context.Context, deleteTicketsFromDB fu
 
 	eg, groupCtx := errgroup.WithContext(ctx)
 
-	for i := 0; i < workerCount; i++ {
+	for range workerCount {
 		eg.Go(func() (err error) {
 			defer func() {
 				if r := recover(); r != nil {
-					slog.Error("Worker paccked!", "panic", r)
+					slog.Error("Worker panicked!", "panic", r)
 					err = fmt.Errorf("worker panic: %v", r)
 				}
 			}()

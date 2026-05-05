@@ -26,9 +26,3 @@ func (s *Seat) Validate() error {
 
 	return nil
 }
-
-type ShowtimeSeat struct {
-	ID     int    `json:"id"`
-	Number string `json:"number"`
-	Status string `json:"status"`
-}

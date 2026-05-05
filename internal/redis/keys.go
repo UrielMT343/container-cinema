@@ -25,3 +25,7 @@ func (client *Redis) BuildSeatsCheckKey(idShowtime int, idSeat int) string {
 func (client *Redis) BuildCartLimitKey(cartIDstr string) string {
 	return fmt.Sprintf("cart:%s:count", cartIDstr)
 }
+
+func (client *Redis) BuildAllShowtimesKey() string {
+	return "showtime:all"
+}

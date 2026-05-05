@@ -421,7 +421,7 @@ const docTemplate = `{
                         "schema": {
                             "type": "array",
                             "items": {
-                                "$ref": "#/definitions/models.Showtime"
+                                "$ref": "#/definitions/showtime.ShowtimeDetailsResponse"
                             }
                         }
                     },
@@ -460,7 +460,7 @@ const docTemplate = `{
                     "200": {
                         "description": "Showtime details",
                         "schema": {
-                            "$ref": "#/definitions/models.Showtime"
+                            "$ref": "#/definitions/showtime.ShowtimeDetailsResponse"
                         }
                     },
                     "400": {
@@ -498,7 +498,7 @@ const docTemplate = `{
                         "in": "body",
                         "required": true,
                         "schema": {
-                            "$ref": "#/definitions/ticket.ReqTicket"
+                            "$ref": "#/definitions/ticket.TicketRequest"
                         }
                     }
                 ],
@@ -546,13 +546,24 @@ const docTemplate = `{
                     "tickets"
                 ],
                 "summary": "Confirm held tickets",
+                "parameters": [
+                    {
+                        "description": "Request payload",
+                        "name": "request",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/ticket.ConfirmRequest"
+                        }
+                    }
+                ],
                 "responses": {
                     "200": {
                         "description": "Confirmed tickets",
                         "schema": {
                             "type": "array",
                             "items": {
-                                "$ref": "#/definitions/models.Ticket"
+                                "$ref": "#/definitions/ticket.TicketResponse"
                             }
                         }
                     },
@@ -651,26 +662,12 @@ const docTemplate = `{
                 }
             }
         },
-        "models.Showtime": {
-            "type": "object",
-            "properties": {
-                "id": {
-                    "type": "integer"
-                },
-                "idAuditorium": {
-                    "type": "integer"
-                },
-                "idMovie": {
-                    "type": "integer"
-                },
-                "startTime": {
-                    "type": "string"
-                }
-            }
-        },
         "models.Ticket": {
             "type": "object",
             "properties": {
+                "email": {
+                    "type": "string"
+                },
                 "id": {
                     "type": "string"
                 },
@@ -725,9 +722,65 @@ const docTemplate = `{
                 "data": {}
             }
         },
-        "ticket.ReqTicket": {
+        "showtime.AuditoriumSummary": {
             "type": "object",
             "properties": {
+                "id": {
+                    "type": "integer"
+                },
+                "name": {
+                    "type": "string"
+                }
+            }
+        },
+        "showtime.MovieSummary": {
+            "type": "object",
+            "properties": {
+                "id": {
+                    "type": "integer"
+                },
+                "name": {
+                    "type": "string"
+                }
+            }
+        },
+        "showtime.ShowtimeDetailsResponse": {
+            "type": "object",
+            "properties": {
+                "auditorium": {
+                    "$ref": "#/definitions/showtime.AuditoriumSummary"
+                },
+                "id": {
+                    "type": "integer"
+                },
+                "movie": {
+                    "$ref": "#/definitions/showtime.MovieSummary"
+                },
+                "startTime": {
+                    "type": "string"
+                }
+            }
+        },
+        "ticket.ConfirmRequest": {
+            "type": "object",
+            "properties": {
+                "email": {
+                    "type": "string"
+                },
+                "ticketIds": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                }
+            }
+        },
+        "ticket.TicketRequest": {
+            "type": "object",
+            "properties": {
+                "email": {
+                    "type": "string"
+                },
                 "idSeats": {
                     "type": "array",
                     "items": {
@@ -739,6 +792,26 @@ const docTemplate = `{
                 },
                 "idUser": {
                     "type": "integer"
+                }
+            }
+        },
+        "ticket.TicketResponse": {
+            "type": "object",
+            "properties": {
+                "expiresAt": {
+                    "type": "string"
+                },
+                "id": {
+                    "type": "string"
+                },
+                "idSeat": {
+                    "type": "integer"
+                },
+                "idShowtime": {
+                    "type": "integer"
+                },
+                "status": {
+                    "type": "string"
                 }
             }
         },
@@ -775,10 +848,10 @@ const docTemplate = `{
 
 // SwaggerInfo holds exported Swagger Info so clients can modify it
 var SwaggerInfo = &swag.Spec{
-	Version:          "2.0",
-	Host:             "localhost:8080",
+	Version:          "1.0",
+	Host:             "localhost",
 	BasePath:         "/api/v1",
-	Schemes:          []string{},
+	Schemes:          []string{"https"},
 	Title:            "Cloud Cinema API",
 	Description:      "This is the distributed backend for the Cloud Cinema ticket booking system.",
 	InfoInstanceName: "swagger",

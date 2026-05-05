@@ -13,12 +13,17 @@ import (
 	"golang.org/x/crypto/bcrypt"
 )
 
+type ticketStore interface {
+	CreateUser(user models.User) (models.User, error)
+	GetUserByEmail(email string) (models.User, error)
+}
+
 type Handler struct {
-	store  *Store
+	store  ticketStore
 	secret string
 }
 
-func NewHandler(st *Store, s string) *Handler {
+func NewHandler(st ticketStore, s string) *Handler {
 	return &Handler{store: st, secret: s}
 }
 

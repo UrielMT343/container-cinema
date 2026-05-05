@@ -1,12 +1,15 @@
 {
+    "schemes": [
+        "https"
+    ],
     "swagger": "2.0",
     "info": {
         "description": "This is the distributed backend for the Cloud Cinema ticket booking system.",
         "title": "Cloud Cinema API",
         "contact": {},
-        "version": "2.0"
+        "version": "1.0"
     },
-    "host": "localhost:8080",
+    "host": "localhost",
     "basePath": "/api/v1",
     "paths": {
         "/admin/movies": {
@@ -415,7 +418,7 @@
                         "schema": {
                             "type": "array",
                             "items": {
-                                "$ref": "#/definitions/models.Showtime"
+                                "$ref": "#/definitions/showtime.ShowtimeDetailsResponse"
                             }
                         }
                     },
@@ -454,7 +457,7 @@
                     "200": {
                         "description": "Showtime details",
                         "schema": {
-                            "$ref": "#/definitions/models.Showtime"
+                            "$ref": "#/definitions/showtime.ShowtimeDetailsResponse"
                         }
                     },
                     "400": {
@@ -492,7 +495,7 @@
                         "in": "body",
                         "required": true,
                         "schema": {
-                            "$ref": "#/definitions/ticket.ReqTicket"
+                            "$ref": "#/definitions/ticket.TicketRequest"
                         }
                     }
                 ],
@@ -540,13 +543,24 @@
                     "tickets"
                 ],
                 "summary": "Confirm held tickets",
+                "parameters": [
+                    {
+                        "description": "Request payload",
+                        "name": "request",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/ticket.ConfirmRequest"
+                        }
+                    }
+                ],
                 "responses": {
                     "200": {
                         "description": "Confirmed tickets",
                         "schema": {
                             "type": "array",
                             "items": {
-                                "$ref": "#/definitions/models.Ticket"
+                                "$ref": "#/definitions/ticket.TicketResponse"
                             }
                         }
                     },
@@ -645,26 +659,12 @@
                 }
             }
         },
-        "models.Showtime": {
-            "type": "object",
-            "properties": {
-                "id": {
-                    "type": "integer"
-                },
-                "idAuditorium": {
-                    "type": "integer"
-                },
-                "idMovie": {
-                    "type": "integer"
-                },
-                "startTime": {
-                    "type": "string"
-                }
-            }
-        },
         "models.Ticket": {
             "type": "object",
             "properties": {
+                "email": {
+                    "type": "string"
+                },
                 "id": {
                     "type": "string"
                 },
@@ -719,9 +719,65 @@
                 "data": {}
             }
         },
-        "ticket.ReqTicket": {
+        "showtime.AuditoriumSummary": {
             "type": "object",
             "properties": {
+                "id": {
+                    "type": "integer"
+                },
+                "name": {
+                    "type": "string"
+                }
+            }
+        },
+        "showtime.MovieSummary": {
+            "type": "object",
+            "properties": {
+                "id": {
+                    "type": "integer"
+                },
+                "name": {
+                    "type": "string"
+                }
+            }
+        },
+        "showtime.ShowtimeDetailsResponse": {
+            "type": "object",
+            "properties": {
+                "auditorium": {
+                    "$ref": "#/definitions/showtime.AuditoriumSummary"
+                },
+                "id": {
+                    "type": "integer"
+                },
+                "movie": {
+                    "$ref": "#/definitions/showtime.MovieSummary"
+                },
+                "startTime": {
+                    "type": "string"
+                }
+            }
+        },
+        "ticket.ConfirmRequest": {
+            "type": "object",
+            "properties": {
+                "email": {
+                    "type": "string"
+                },
+                "ticketIds": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                }
+            }
+        },
+        "ticket.TicketRequest": {
+            "type": "object",
+            "properties": {
+                "email": {
+                    "type": "string"
+                },
                 "idSeats": {
                     "type": "array",
                     "items": {
@@ -733,6 +789,26 @@
                 },
                 "idUser": {
                     "type": "integer"
+                }
+            }
+        },
+        "ticket.TicketResponse": {
+            "type": "object",
+            "properties": {
+                "expiresAt": {
+                    "type": "string"
+                },
+                "id": {
+                    "type": "string"
+                },
+                "idSeat": {
+                    "type": "integer"
+                },
+                "idShowtime": {
+                    "type": "integer"
+                },
+                "status": {
+                    "type": "string"
                 }
             }
         },

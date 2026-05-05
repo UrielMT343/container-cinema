@@ -1,6 +1,7 @@
 package movie
 
 import (
+	"context"
 	"encoding/json"
 	"log/slog"
 	"net/http"
@@ -10,11 +11,16 @@ import (
 	"start/internal/response"
 )
 
-type Handler struct {
-	store *Store
+type ticketStore interface {
+	GetAllMovies(ctx context.Context, limit int, offset int) (MoviePage, error)
+	CreateMovie(ctx context.Context, m models.Movie) (int, error)
 }
 
-func NewHandler(st *Store) *Handler {
+type Handler struct {
+	store ticketStore
+}
+
+func NewHandler(st ticketStore) *Handler {
 	return &Handler{store: st}
 }
 

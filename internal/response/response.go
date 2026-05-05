@@ -18,7 +18,7 @@ func Respond(w http.ResponseWriter, status int, data any) {
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(status)
 
-	err := json.NewEncoder(w).Encode(Response{Data: data})
+	err := json.NewEncoder(w).Encode(data)
 	if err != nil {
 		log.Printf("failed to write success response: %v", err)
 	}

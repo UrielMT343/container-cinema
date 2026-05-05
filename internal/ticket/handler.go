@@ -1,6 +1,7 @@
 package ticket
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -11,33 +12,63 @@ import (
 	"start/internal/auth"
 	"start/internal/config"
 	"start/internal/models"
-	"start/internal/rabbitmq"
-	redisclient "start/internal/redis"
 	"start/internal/response"
 
 	"github.com/google/uuid"
 )
 
-type Handler struct {
-	store *Store
-	queue *rabbitmq.RabbitMQ
-	redis *redisclient.Redis
-}
-
-type ReqTicket struct {
+type TicketRequest struct {
 	IDUser     *int    `json:"idUser,omitempty"`
 	Email      *string `json:"email,omitempty"`
 	IDShowtime int     `json:"idShowtime"`
 	IDSeats    []int   `json:"idSeats"`
 }
 
-type ReqConfirm struct {
+type ConfirmRequest struct {
 	TicketIDs []string `json:"ticketIds"`
 	Email     *string  `json:"email,omitempty"`
 }
 
-func NewHandler(st *Store, q *rabbitmq.RabbitMQ, r *redisclient.Redis) *Handler {
-	return &Handler{store: st, queue: q, redis: r}
+type TicketResponse struct {
+	ID         uuid.UUID `json:"id"`
+	IDShowtime int       `json:"idShowtime"`
+	Status     string    `json:"status"`
+	IDSeat     int       `json:"idSeat"`
+	ExpiresAt  time.Time `json:"expiresAt"`
+}
+
+type ticketStore interface {
+	UpdateTicketStatuses(ctx context.Context, ticketIDs []uuid.UUID, email *string) ([]models.Ticket, error)
+	CheckShowtimeExists(ctx context.Context, idShowtime int) (bool, error)
+	CreateTickets(ctx context.Context, tickets []models.Ticket) ([]models.Ticket, error)
+	DeleteTicket(ctx context.Context, id uuid.UUID) error
+}
+
+type cacheService interface {
+	GetCache(key string, ctx context.Context) (string, error)
+    SetCache(key string, value any, ttl time.Duration, ctx context.Context) error
+    BuildShowtimeSeatsKey(idShowtime int) string
+    BuildCartLimitKey(cartID string) string
+    BuildSeatsCheckKey(idShowtime int, idSeat int) string
+    DeleteKey(key string, ctx context.Context) error
+    IncrBy(key string, value int64, ctx context.Context) (int64, error)
+    DecrBy(key string, value int64, ctx context.Context) (int64, error)
+    SetCacheNX(key string, value any, ttl time.Duration, ctx context.Context) (bool, error)
+    Expire(key string, ttl time.Duration, ctx context.Context) error
+}
+
+type queueService interface {
+	PublishHoldTicket(body []byte, ttl time.Duration) (err error)
+}
+
+type Handler struct {
+	store ticketStore
+	queue queueService
+	cache cacheService
+}
+
+func NewHandler(s ticketStore, q queueService, c cacheService) *Handler {
+	return &Handler{store: s, queue: q, cache: c}
 }
 
 // ConfirmTicket confirms held tickets and marks them as sold
@@ -46,7 +77,8 @@ func NewHandler(st *Store, q *rabbitmq.RabbitMQ, r *redisclient.Redis) *Handler 
 // @Tags tickets
 // @Accept json
 // @Produce json
-// @Success 200 {object} []models.Ticket "Confirmed tickets"
+// @Param request body ConfirmRequest true "Request payload"
+// @Success 200 {object} []TicketResponse "Confirmed tickets"
 // @Failure 400 {object} response.ErrorResponse "Invalid ticket ID"
 // @Failure 500 {object} response.ErrorResponse "Internal server error"
 // @Router /user/ticket/pay [patch]
@@ -59,7 +91,7 @@ func (h *Handler) ConfirmTicket(w http.ResponseWriter, r *http.Request) {
 
 	ctx := r.Context()
 
-	var req ReqConfirm
+	var req ConfirmRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		response.Error(w, http.StatusBadRequest, "Invalid request payload")
 		return
@@ -97,15 +129,21 @@ func (h *Handler) ConfirmTicket(w http.ResponseWriter, r *http.Request) {
 
 	IDShowtime := updatedTickets[0].IDShowtime
 
-	cacheShowtimeKey := h.redis.BuildShowtimeSeatsKey(IDShowtime)
+	bgCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 
-	errDelete := h.redis.DeleteKey(cacheShowtimeKey, ctx)
-	if errDelete != nil {
-		slog.Warn("Failed to invalidate cache", "error", errDelete, "key", cacheShowtimeKey)
-	}
+	go func(showtimeID int, cID string) {
+		defer cancel()
 
-	cartLimitKey := h.redis.BuildCartLimitKey(cartID)
-	_ = h.redis.DeleteKey(cartLimitKey, ctx)
+		cacheShowtimeKey := h.cache.BuildShowtimeSeatsKey(showtimeID)
+		if err := h.cache.DeleteKey(cacheShowtimeKey, bgCtx); err != nil {
+			slog.Warn("Failed to invalidate showtime cache", "error", err, "key", cacheShowtimeKey)
+		}
+
+		cartLimitKey := h.cache.BuildCartLimitKey(cID)
+		if err := h.cache.DeleteKey(cartLimitKey, bgCtx); err != nil {
+			slog.Warn("Failed to invalidate cart cache", "error", err, "key", cartLimitKey)
+		}
+	}(IDShowtime, cartID)
 
 	response.Respond(w, http.StatusOK, updatedTickets)
 }
@@ -116,7 +154,7 @@ func (h *Handler) ConfirmTicket(w http.ResponseWriter, r *http.Request) {
 // @Tags tickets
 // @Accept json
 // @Produce json
-// @Param request body ReqTicket true "Request payload"
+// @Param request body TicketRequest true "Request payload"
 // @Success 202 {object} []models.Ticket "Held tickets"
 // @Failure 400 {object} response.ErrorResponse "Invalid request payload or seat selection"
 // @Failure 409 {object} response.ErrorResponse "Seat already taken"
@@ -132,7 +170,7 @@ func (h *Handler) HoldTicket(w http.ResponseWriter, r *http.Request) {
 
 	ctx := r.Context()
 
-	var reqTicket ReqTicket
+	var reqTicket TicketRequest
 	err := json.NewDecoder(r.Body).Decode(&reqTicket)
 	if err != nil {
 		slog.Error("Bad request payload", "error", err, "path", r.URL.Path)
@@ -161,9 +199,9 @@ func (h *Handler) HoldTicket(w http.ResponseWriter, r *http.Request) {
 
 	seatLimit := int64(config.SeatsLimit)
 
-	cartLimitKey := h.redis.BuildCartLimitKey(cartID)
+	cartLimitKey := h.cache.BuildCartLimitKey(cartID)
 
-	newTotal, errIncr := h.redis.IncrBy(cartLimitKey, requestedSeats, ctx)
+	newTotal, errIncr := h.cache.IncrBy(cartLimitKey, requestedSeats, ctx)
 	if errIncr != nil {
 		slog.Error("Failed to increment cart limit in Redis", "error", errIncr)
 		response.Error(w, http.StatusInternalServerError, "Failed to verify cart limits")
@@ -171,7 +209,7 @@ func (h *Handler) HoldTicket(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if newTotal > seatLimit {
-		_, _ = h.redis.DecrBy(cartLimitKey, requestedSeats, ctx)
+		_, _ = h.cache.DecrBy(cartLimitKey, requestedSeats, ctx)
 
 		slog.Warn("Seat limit exceeded", "current_total_attempted", newTotal, "limit", seatLimit)
 		message := fmt.Sprintf("You can only hold %d seats at a time.", seatLimit)
@@ -182,9 +220,9 @@ func (h *Handler) HoldTicket(w http.ResponseWriter, r *http.Request) {
 	snipeTTL := 5 * time.Second
 
 	for _, seatID := range reqTicket.IDSeats {
-		snipeKey := h.redis.BuildSeatsCheckKey(reqTicket.IDShowtime, seatID)
+		snipeKey := h.cache.BuildSeatsCheckKey(reqTicket.IDShowtime, seatID)
 
-		acquired, errSetNX := h.redis.SetCacheNX(snipeKey, cartID, snipeTTL, ctx)
+		acquired, errSetNX := h.cache.SetCacheNX(snipeKey, cartID, snipeTTL, ctx)
 		if errSetNX != nil {
 			slog.Error("Redis server error during snipe guard", "error", errSetNX)
 			response.Error(w, http.StatusInternalServerError, "An unexpected error occurred")
@@ -196,6 +234,14 @@ func (h *Handler) HoldTicket(w http.ResponseWriter, r *http.Request) {
 			response.Error(w, http.StatusConflict, fmt.Sprintf("Seat %d is currently being purchased by someone else!", seatID))
 			return
 		}
+	}
+
+	if reqTicket.IDUser != nil && *reqTicket.IDUser == 0 {
+	    reqTicket.IDUser = nil
+	}
+
+	if reqTicket.Email != nil && *reqTicket.Email == "" {
+	    reqTicket.Email = nil
 	}
 
 	ttl := time.Duration(config.HoldTicketTTLMinutes)
@@ -212,7 +258,7 @@ func (h *Handler) HoldTicket(w http.ResponseWriter, r *http.Request) {
 		tickets = append(tickets, ticket)
 	}
 
-	if errExpire := h.redis.Expire(cartID, ttl, ctx); errExpire != nil {
+	if errExpire := h.cache.Expire(cartID, ttl, ctx); errExpire != nil {
 		slog.Error("Failed to set TTL on cart", "error", errExpire, "cartID", cartID)
 	}
 
@@ -223,7 +269,7 @@ func (h *Handler) HoldTicket(w http.ResponseWriter, r *http.Request) {
 			response.Error(w, http.StatusConflict, ErrInsertConflict.Error())
 			return
 		} else {
-			_, _ = h.redis.DecrBy(cartLimitKey, requestedSeats, ctx)
+			_, _ = h.cache.DecrBy(cartLimitKey, requestedSeats, ctx)
 
 			slog.Error("Error while inserting the tickets", "error", errInsert)
 			response.Error(w, http.StatusInternalServerError, "An unexpected error occurred")
@@ -240,11 +286,26 @@ func (h *Handler) HoldTicket(w http.ResponseWriter, r *http.Request) {
 	}
 
 	cacheShowtimeKey := fmt.Sprintf("seats:showtime:%d", reqTicket.IDShowtime)
-	if errDelete := h.redis.DeleteKey(cacheShowtimeKey, ctx); errDelete != nil {
+	if errDelete := h.cache.DeleteKey(cacheShowtimeKey, ctx); errDelete != nil {
 		slog.Warn("Failed to invalidate cache", "error", errDelete, "key", cacheShowtimeKey)
 	}
 
-	response.Respond(w, http.StatusAccepted, tickets)
+	responseTickets := make([]TicketResponse, 0, len(insertedTickets))
+
+	expiresAt := time.Now().Add(ttl)
+
+	for _, t := range insertedTickets {
+		newTicket := TicketResponse {
+			ID: t.ID,
+			IDShowtime: t.IDShowtime,
+			IDSeat: t.IDSeat,
+			Status: t.Status,
+			ExpiresAt: expiresAt,
+		}
+		responseTickets = append(responseTickets, newTicket)
+	}
+
+	response.Respond(w, http.StatusAccepted, responseTickets)
 }
 
 // CancelTicket cancels a ticket by ID
@@ -305,8 +366,8 @@ func (h *Handler) BeginCheckout(w http.ResponseWriter, r *http.Request) {
 		Value:    cartIDstr,
 		Expires:  time.Now().Add(tokenExp),
 		HttpOnly: true,
-		Secure:   false,
-		SameSite: http.SameSiteStrictMode,
+		Secure:   true,
+		SameSite: http.SameSiteNoneMode,
 		Path:     "/",
 	}
 

@@ -32,8 +32,8 @@ func (s *Store) CreateTickets(ctx context.Context, tickets []models.Ticket) (ins
 
 	pool := s.db.GetDB()
 
-	var ids []uuid.UUID
-	var seatIDs []int
+	var ids = make([]uuid.UUID, 0, len(tickets))
+	var seatIDs = make([]int, 0, len(tickets))
 
 	idUser := tickets[0].IDUser
 	idShowtime := tickets[0].IDShowtime
@@ -122,7 +122,7 @@ func (s *Store) UpdateTicketStatuses(ctx context.Context, ticketIDs []uuid.UUID,
 	}
 	defer rows.Close()
 
-	var updatedTickets []models.Ticket
+	var updatedTickets = make([]models.Ticket, 0, len(ticketIDs))
 
 	for rows.Next() {
 		var t models.Ticket
@@ -166,14 +166,14 @@ func (s *Store) DeleteTicket(ctx context.Context, id uuid.UUID) error {
 	return nil
 }
 
-func (s *Store) CheckIfSeatOccupied(ctx context.Context, seatIDs []int, showtimeID int) ([]string, error) {
+func (s *Store) CheckIfSeatOccupied(ctx context.Context, seatIDs []int, idShowtime int) ([]string, error) {
 	if len(seatIDs) == 0 {
 		return nil, nil
 	}
 
 	pool := s.db.GetDB()
 
-	var occupiedSeats []string
+	var occupiedSeats = make([]string, 0, len(seatIDs))
 
 	query := `
 		SELECT COALESCE(
@@ -186,7 +186,7 @@ func (s *Store) CheckIfSeatOccupied(ctx context.Context, seatIDs []int, showtime
 	  	AND t.id_seat = ANY($2::int[])
 	  	AND t.status IN ('HELD', 'SOLD');
 	`
-	err := pool.QueryRow(ctx, query, showtimeID, seatIDs).Scan(&occupiedSeats)
+	err := pool.QueryRow(ctx, query, idShowtime, seatIDs).Scan(&occupiedSeats)
 	if err != nil {
 		return nil, err
 	}
@@ -198,7 +198,7 @@ func (s *Store) CheckIfSeatOccupied(ctx context.Context, seatIDs []int, showtime
 	return occupiedSeats, nil
 }
 
-func (s *Store) CheckShowtimeExists(ctx context.Context, showtimeID int) (bool, error) {
+func (s *Store) CheckShowtimeExists(ctx context.Context, idShowtime int) (bool, error) {
 	pool := s.db.GetDB()
 
 	var exists bool
@@ -206,7 +206,7 @@ func (s *Store) CheckShowtimeExists(ctx context.Context, showtimeID int) (bool, 
 	query := `
 		SELECT EXISTS(SELECT 1 FROM showtimes WHERE id = $1);
 	`
-	err := pool.QueryRow(ctx, query, showtimeID).Scan(&exists)
+	err := pool.QueryRow(ctx, query, idShowtime).Scan(&exists)
 	if err != nil {
 		return false, err
 	}
