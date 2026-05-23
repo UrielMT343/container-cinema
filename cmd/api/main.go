@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"start/internal/database"
+	"start/internal/events"
 	"start/internal/movie"
 	"start/internal/rabbitmq"
 	redisclient "start/internal/redis"
@@ -118,6 +119,8 @@ func main() {
 
 	tokenSecret := os.Getenv("JWT_SECRET")
 
+	globalBroker := events.NewShowtimeBroker()
+
 	movieStore := movie.New(service)
 	movieHandler := movie.NewHandler(movieStore)
 
@@ -128,10 +131,12 @@ func main() {
 	showtimeHandler := showtime.NewHandler(showtimeStore, rdb)
 
 	ticketStore := ticket.New(service)
-	ticketHandler := ticket.NewHandler(ticketStore, queue, rdb)
+	ticketHandler := ticket.NewHandler(ticketStore, queue, rdb, globalBroker)
 
 	userStore := user.New(service)
 	userHandler := user.NewHandler(userStore, tokenSecret)
+
+	eventHandler := events.NewHandler(globalBroker)
 
 	cfg := &Config{
 		movieHanlder:    movieHandler,
@@ -139,6 +144,7 @@ func main() {
 		showtimeHanlder: showtimeHandler,
 		ticketHandler:   ticketHandler,
 		userHandler:     userHandler,
+		eventHandler:    eventHandler,
 	}
 
 	apiVersion := os.Getenv("API_VERSION")
@@ -146,7 +152,7 @@ func main() {
 
 	handler := routes(cfg, basePrefix, tokenSecret)
 
-	go queue.CleanupDLXTickets(rootCtx, ticketStore.DeleteTicket, rdb)
+	go queue.CleanupDLXTickets(rootCtx, ticketStore.DeleteTicket, rdb, globalBroker)
 
 	apiPort := os.Getenv("API_PORT")
 

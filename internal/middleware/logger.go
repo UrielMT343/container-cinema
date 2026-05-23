@@ -3,6 +3,7 @@ package middleware
 import (
 	"log/slog"
 	"net/http"
+	"strings"
 	"time"
 )
 
@@ -18,7 +19,7 @@ func (rec *responseRecorder) WriteHeader(statusCode int) {
 
 func Logger(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if r.URL.Path == "/health" {
+		if r.URL.Path == "/health" || strings.HasPrefix(r.URL.Path, "/api/v1/public/sse/") {
 			next.ServeHTTP(w, r)
 			return
 		}

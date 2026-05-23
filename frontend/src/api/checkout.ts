@@ -1,5 +1,6 @@
 import apiClient from "@/lib/axios";
 import type {
+  CheckoutBeginResponse,
   HoldRequestPayload,
   HeldTicket,
   ConfirmRequestPayload,
@@ -7,8 +8,14 @@ import type {
 } from "@/types/cart";
 import type { ErrorResponse } from "@/types/showtimes";
 
-export const beginCheckout = async (): Promise<void> => {
-    await apiClient.post("/public/checkout/begin");
+export const beginCheckout = async (): Promise<CheckoutBeginResponse> => {
+    const response = await apiClient.post<CheckoutBeginResponse | ErrorResponse>(
+        "/public/checkout/begin",
+    );
+    if (response.data && "error" in response.data) {
+        throw new Error(response.data.error);
+    }
+    return response.data as CheckoutBeginResponse;
 };
 
 export const holdTickets = async (

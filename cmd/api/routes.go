@@ -4,6 +4,7 @@ import (
 	"net/http"
 	"strings"
 
+	"start/internal/events"
 	"start/internal/health"
 	"start/internal/middleware"
 	"start/internal/movie"
@@ -23,6 +24,7 @@ type Config struct {
 	showtimeHanlder *showtime.Handler
 	ticketHandler   *ticket.Handler
 	userHandler     *user.Handler
+	eventHandler    *events.Handler
 }
 
 func routes(c *Config, basePrefix string, secret string) http.Handler {
@@ -40,6 +42,8 @@ func routes(c *Config, basePrefix string, secret string) http.Handler {
 	publicMux.HandleFunc("GET /seats/showtime/{id}", c.seatHandler.GetSeatsByShowtime)
 	publicMux.HandleFunc("POST /login", c.userHandler.LoginUser)
 	publicMux.HandleFunc("POST /checkout/begin", c.ticketHandler.BeginCheckout)
+	publicMux.HandleFunc("GET /sse/showtimes/{id}", c.eventHandler.StreamShowtimeSeats)
+
 	adminMux.HandleFunc("GET /movies", c.movieHanlder.GetMovies)
 	adminMux.HandleFunc("POST /movies", c.movieHanlder.InsertMovie)
 	adminMux.HandleFunc("POST /seats", c.seatHandler.InsertSeat)

@@ -291,7 +291,7 @@ const docTemplate = `{
                     "200": {
                         "description": "Cart created",
                         "schema": {
-                            "$ref": "#/definitions/response.Response"
+                            "$ref": "#/definitions/ticket.CheckoutBeginResponse"
                         }
                     },
                     "500": {
@@ -478,6 +478,35 @@ const docTemplate = `{
                 }
             }
         },
+        "/showtimes/event/{id}": {
+            "get": {
+                "description": "Establishes a Server-Sent Events (SSE) connection to broadcast seat holds and purchases.\nThe stream remains open indefinitely. Each event contains a JSON payload in the ` + "`" + `data` + "`" + ` field representing the seat status.",
+                "produces": [
+                    "text/event-stream"
+                ],
+                "tags": [
+                    "Events"
+                ],
+                "summary": "Stream real-time seat updates",
+                "parameters": [
+                    {
+                        "type": "integer",
+                        "description": "Showtime ID",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "The JSON payload sent inside the SSE 'data' block",
+                        "schema": {
+                            "$ref": "#/definitions/events.SeatEventPayload"
+                        }
+                    }
+                }
+            }
+        },
         "/user/ticket/hold": {
             "post": {
                 "description": "Hold seats for a user by creating temporary ticket reservations",
@@ -631,6 +660,17 @@ const docTemplate = `{
         }
     },
     "definitions": {
+        "events.SeatEventPayload": {
+            "type": "object",
+            "properties": {
+                "seatId": {
+                    "type": "integer"
+                },
+                "status": {
+                    "type": "string"
+                }
+            }
+        },
         "models.Movie": {
             "type": "object",
             "properties": {
@@ -757,6 +797,17 @@ const docTemplate = `{
                     "$ref": "#/definitions/showtime.MovieSummary"
                 },
                 "startTime": {
+                    "type": "string"
+                }
+            }
+        },
+        "ticket.CheckoutBeginResponse": {
+            "type": "object",
+            "properties": {
+                "cartId": {
+                    "type": "string"
+                },
+                "expiresAt": {
                     "type": "string"
                 }
             }

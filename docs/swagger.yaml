@@ -1,5 +1,12 @@
 basePath: /api/v1
 definitions:
+  events.SeatEventPayload:
+    properties:
+      seatId:
+        type: integer
+      status:
+        type: string
+    type: object
   models.Movie:
     properties:
       durationMin:
@@ -82,6 +89,13 @@ definitions:
       movie:
         $ref: '#/definitions/showtime.MovieSummary'
       startTime:
+        type: string
+    type: object
+  ticket.CheckoutBeginResponse:
+    properties:
+      cartId:
+        type: string
+      expiresAt:
         type: string
     type: object
   ticket.ConfirmRequest:
@@ -326,7 +340,7 @@ paths:
         "200":
           description: Cart created
           schema:
-            $ref: '#/definitions/response.Response'
+            $ref: '#/definitions/ticket.CheckoutBeginResponse'
         "500":
           description: Internal server error
           schema:
@@ -449,6 +463,27 @@ paths:
       summary: Get showtime by ID
       tags:
       - showtimes
+  /showtimes/event/{id}:
+    get:
+      description: |-
+        Establishes a Server-Sent Events (SSE) connection to broadcast seat holds and purchases.
+        The stream remains open indefinitely. Each event contains a JSON payload in the `data` field representing the seat status.
+      parameters:
+      - description: Showtime ID
+        in: path
+        name: id
+        required: true
+        type: integer
+      produces:
+      - text/event-stream
+      responses:
+        "200":
+          description: The JSON payload sent inside the SSE 'data' block
+          schema:
+            $ref: '#/definitions/events.SeatEventPayload'
+      summary: Stream real-time seat updates
+      tags:
+      - Events
   /user/ticket/{id}:
     delete:
       consumes:

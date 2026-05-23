@@ -38,8 +38,8 @@ type showtimeStore interface {
 
 type cacheService interface {
 	GetCache(key string, ctx context.Context) (string, error)
-    SetCache(key string, value any, ttl time.Duration, ctx context.Context) error
-    BuildAllShowtimesKey() string
+	SetCache(key string, value any, ttl time.Duration, ctx context.Context) error
+	BuildAllShowtimesKey() string
 }
 
 type Handler struct {

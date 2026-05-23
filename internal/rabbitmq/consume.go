@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"start/internal/config"
+	"start/internal/events"
 	"start/internal/models"
 	redisclient "start/internal/redis"
 
@@ -16,7 +17,7 @@ import (
 	"golang.org/x/sync/errgroup"
 )
 
-func (q *RabbitMQ) CleanupDLXTickets(ctx context.Context, deleteTicketsFromDB func(ctx context.Context, ticketID uuid.UUID) error, rdb *redisclient.Redis) {
+func (q *RabbitMQ) CleanupDLXTickets(ctx context.Context, deleteTicketsFromDB func(ctx context.Context, ticketID uuid.UUID) error, rdb *redisclient.Redis, broker *events.ShowtimeBroker) {
 	ch, err := q.NewChannel()
 	if err != nil {
 		return
@@ -71,11 +72,14 @@ func (q *RabbitMQ) CleanupDLXTickets(ctx context.Context, deleteTicketsFromDB fu
 
 				var fatalError bool
 
+				broadcast := true
+
 				for _, ticket := range tickets {
 					ctxDelete, cancel := context.WithTimeout(groupCtx, 5*time.Second)
 					err = deleteTicketsFromDB(ctxDelete, ticket.ID)
 					cancel()
 					if err != nil {
+						broadcast = false
 						if errors.Is(err, models.ErrorTicketNotHeld) {
 							slog.Info("Ticket paid or already freed, skipping", "id", ticket.ID)
 							continue
@@ -104,6 +108,24 @@ func (q *RabbitMQ) CleanupDLXTickets(ctx context.Context, deleteTicketsFromDB fu
 				errDeleteKey := rdb.DeleteKey(cacheShowtimeKey, ctx)
 				if errDeleteKey != nil {
 					slog.Warn("Failed to invalidate cache", "showtimeKey", cacheShowtimeKey, "error", errDeleteKey)
+				}
+
+				if broadcast {
+					ssePayload := make([]events.SeatEventPayload, 0, len(tickets))
+
+					for _, t := range tickets {
+						ssePayload = append(ssePayload, events.SeatEventPayload{
+							IDSeat: t.IDSeat,
+							Status: "AVAILABLE",
+						})
+					}
+
+					b, errFormat := events.FormatSSE("seat_update", ssePayload)
+					if errFormat != nil {
+						slog.Error("Failed to format payload", "error", errFormat, "payload", ssePayload)
+					}
+
+					broker.Broadcast(tickets[0].IDShowtime, b)
 				}
 			}
 			return nil

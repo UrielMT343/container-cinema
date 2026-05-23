@@ -11,6 +11,7 @@ import (
 
 	"start/internal/auth"
 	"start/internal/config"
+	"start/internal/events"
 	"start/internal/models"
 	"start/internal/response"
 
@@ -37,6 +38,10 @@ type TicketResponse struct {
 	ExpiresAt  time.Time `json:"expiresAt"`
 }
 
+type CheckoutBeginResponse struct {
+	ExpiresAt time.Time `json:"expiresAt"`
+}
+
 type ticketStore interface {
 	UpdateTicketStatuses(ctx context.Context, ticketIDs []uuid.UUID, email *string) ([]models.Ticket, error)
 	CheckShowtimeExists(ctx context.Context, idShowtime int) (bool, error)
@@ -46,15 +51,16 @@ type ticketStore interface {
 
 type cacheService interface {
 	GetCache(key string, ctx context.Context) (string, error)
-    SetCache(key string, value any, ttl time.Duration, ctx context.Context) error
-    BuildShowtimeSeatsKey(idShowtime int) string
-    BuildCartLimitKey(cartID string) string
-    BuildSeatsCheckKey(idShowtime int, idSeat int) string
-    DeleteKey(key string, ctx context.Context) error
-    IncrBy(key string, value int64, ctx context.Context) (int64, error)
-    DecrBy(key string, value int64, ctx context.Context) (int64, error)
-    SetCacheNX(key string, value any, ttl time.Duration, ctx context.Context) (bool, error)
-    Expire(key string, ttl time.Duration, ctx context.Context) error
+	SetCache(key string, value any, ttl time.Duration, ctx context.Context) error
+	BuildShowtimeSeatsKey(idShowtime int) string
+	BuildCartLimitKey(cartID string) string
+	BuildSeatsCheckKey(idShowtime int, idSeat int) string
+	DeleteKey(key string, ctx context.Context) error
+	IncrBy(key string, value int64, ctx context.Context) (int64, error)
+	DecrBy(key string, value int64, ctx context.Context) (int64, error)
+	SetCacheNX(key string, value any, ttl time.Duration, ctx context.Context) (bool, error)
+	Expire(key string, ttl time.Duration, ctx context.Context) error
+	BuildCartKey(cartIDstr string) string
 }
 
 type queueService interface {
@@ -62,13 +68,14 @@ type queueService interface {
 }
 
 type Handler struct {
-	store ticketStore
-	queue queueService
-	cache cacheService
+	store  ticketStore
+	queue  queueService
+	cache  cacheService
+	broker *events.ShowtimeBroker
 }
 
-func NewHandler(s ticketStore, q queueService, c cacheService) *Handler {
-	return &Handler{store: s, queue: q, cache: c}
+func NewHandler(s ticketStore, q queueService, c cacheService, b *events.ShowtimeBroker) *Handler {
+	return &Handler{store: s, queue: q, cache: c, broker: b}
 }
 
 // ConfirmTicket confirms held tickets and marks them as sold
@@ -144,6 +151,22 @@ func (h *Handler) ConfirmTicket(w http.ResponseWriter, r *http.Request) {
 			slog.Warn("Failed to invalidate cart cache", "error", err, "key", cartLimitKey)
 		}
 	}(IDShowtime, cartID)
+
+	ssePayload := make([]events.SeatEventPayload, 0, len(updatedTickets))
+
+	for _, t := range updatedTickets {
+		ssePayload = append(ssePayload, events.SeatEventPayload{
+			IDSeat: t.IDSeat,
+			Status: t.Status,
+		})
+	}
+
+	b, errFormat := events.FormatSSE("seat_update", ssePayload)
+	if errFormat != nil {
+		slog.Error("Failed to format payload", "error", errFormat, "payload", ssePayload)
+	}
+
+	h.broker.Broadcast(updatedTickets[0].IDShowtime, b)
 
 	response.Respond(w, http.StatusOK, updatedTickets)
 }
@@ -237,14 +260,36 @@ func (h *Handler) HoldTicket(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if reqTicket.IDUser != nil && *reqTicket.IDUser == 0 {
-	    reqTicket.IDUser = nil
+		reqTicket.IDUser = nil
 	}
 
 	if reqTicket.Email != nil && *reqTicket.Email == "" {
-	    reqTicket.Email = nil
+		reqTicket.Email = nil
 	}
 
-	ttl := time.Duration(config.HoldTicketTTLMinutes)
+	expStr, _ := h.cache.GetCache(cartID, ctx)
+
+	var expStrDecoded string
+
+	errUM := json.Unmarshal([]byte(expStr), &expStrDecoded)
+	if errUM != nil {
+		slog.Error("Failed to unmarshal ttl data", "error", err)
+		response.Error(w, http.StatusInternalServerError, "An unexpected error occurred")
+		return
+	}
+
+	exp, errParse := time.Parse(time.RFC3339Nano, expStrDecoded)
+	if errParse != nil {
+		slog.Error("Failed to parse ttl data", "error", errParse)
+		response.Error(w, http.StatusInternalServerError, "An unexpected error occurred")
+		return
+	}
+
+	ttl := time.Until(exp)
+
+	slog.Info("Time value", "expiry", ttl)
+
+	// ttl := time.Duration(config.HoldTicketTTLMinutes)
 
 	var tickets []models.Ticket
 	for _, seatID := range reqTicket.IDSeats {
@@ -295,15 +340,31 @@ func (h *Handler) HoldTicket(w http.ResponseWriter, r *http.Request) {
 	expiresAt := time.Now().Add(ttl)
 
 	for _, t := range insertedTickets {
-		newTicket := TicketResponse {
-			ID: t.ID,
+		newTicket := TicketResponse{
+			ID:         t.ID,
 			IDShowtime: t.IDShowtime,
-			IDSeat: t.IDSeat,
-			Status: t.Status,
-			ExpiresAt: expiresAt,
+			IDSeat:     t.IDSeat,
+			Status:     t.Status,
+			ExpiresAt:  expiresAt,
 		}
 		responseTickets = append(responseTickets, newTicket)
 	}
+
+	ssePayload := make([]events.SeatEventPayload, 0, len(insertedTickets))
+
+	for _, t := range insertedTickets {
+		ssePayload = append(ssePayload, events.SeatEventPayload{
+			IDSeat: t.IDSeat,
+			Status: t.Status,
+		})
+	}
+
+	b, errFormat := events.FormatSSE("seat_update", ssePayload)
+	if errFormat != nil {
+		slog.Error("Failed to format payload", "error", errFormat, "payload", ssePayload)
+	}
+
+	h.broker.Broadcast(reqTicket.IDShowtime, b)
 
 	response.Respond(w, http.StatusAccepted, responseTickets)
 }
@@ -352,14 +413,24 @@ func (h *Handler) CancelTicket(w http.ResponseWriter, r *http.Request) {
 // @Tags tickets
 // @Accept json
 // @Produce json
-// @Success 200 {object} response.Response "Cart created"
+// @Success 200 {object} CheckoutBeginResponse "Cart created"
 // @Failure 500 {object} response.ErrorResponse "Internal server error"
 // @Router /public/checkout/begin [post]
 func (h *Handler) BeginCheckout(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
+
 	cartID := uuid.New()
 	cartIDstr := "cart_" + cartID.String()
 
 	tokenExp := config.CartIDCookieTTLMinutes
+
+	expiresAt := time.Now().Add(tokenExp)
+	expiresAtStr := expiresAt.UTC().Format(time.RFC3339Nano)
+
+	errorCache := h.cache.SetCache(cartIDstr, expiresAtStr, tokenExp, ctx)
+	if errorCache != nil {
+		slog.Error("Error setting the cache", "error", errorCache, "key", cartIDstr)
+	}
 
 	httpCookie := http.Cookie{
 		Name:     "cart_id",
@@ -371,7 +442,11 @@ func (h *Handler) BeginCheckout(w http.ResponseWriter, r *http.Request) {
 		Path:     "/",
 	}
 
+	resp := CheckoutBeginResponse{
+		ExpiresAt: expiresAt,
+	}
+
 	http.SetCookie(w, &httpCookie)
 
-	response.Respond(w, http.StatusOK, "Cart created")
+	response.Respond(w, http.StatusOK, resp)
 }

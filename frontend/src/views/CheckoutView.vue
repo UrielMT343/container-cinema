@@ -4,12 +4,14 @@ import { useRouter } from 'vue-router';
 import { useMutation } from '@tanstack/vue-query';
 import { confirmTickets } from '@/api/checkout';
 import type { ConfirmedTicket } from '@/types/cart';
+import CountdownTimer from '@/components/CountdownTimer.vue';
 
 const router = useRouter();
 const email = ref('');
 const payError = ref<string | null>(null);
 const confirmed = ref(false);
 const ticketCount = ref(0);
+const showAbandonModal = ref(false);
 
 onMounted(() => {
   const raw = sessionStorage.getItem('checkout-session');
@@ -61,6 +63,11 @@ function handlePay() {
 function goHome() {
   router.push('/');
 }
+
+function handleAbandonCart() {
+  sessionStorage.removeItem('checkout-session');
+  router.push('/');
+}
 </script>
 
 <template>
@@ -87,14 +94,16 @@ function goHome() {
 
       <!-- Checkout Form -->
       <div v-else class="bg-white rounded-xl shadow-lg p-8">
+        <CountdownTimer />
+
         <button
-          class="mb-6 inline-flex items-center gap-2 text-blue-600 hover:text-blue-800 transition-colors"
-          @click="$router.back()"
+          class="mb-6 inline-flex items-center gap-2 text-red-600 hover:text-red-800 transition-colors"
+          @click="showAbandonModal = true"
         >
           <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
             <path fill-rule="evenodd" d="M9.707 16.707a1 1 0 01-1.414 0l-6-6a1 1 0 010-1.414l6-6a1 1 0 011.414 1.414L5.414 9H16a1 1 0 110 2H5.414l4.293 4.293a1 1 0 010 1.414z" clip-rule="evenodd" />
           </svg>
-          Back
+          Abandon Reservation
         </button>
 
         <h1 class="text-2xl font-bold text-gray-900 mb-6">Checkout</h1>
@@ -147,5 +156,47 @@ function goHome() {
         </form>
       </div>
     </div>
+
+    <!-- Abandon Confirmation Modal -->
+    <Transition name="fade">
+      <div
+        v-if="showAbandonModal"
+        class="fixed inset-0 z-50 flex items-center justify-center bg-black/50 px-4"
+        @click.self="showAbandonModal = false"
+      >
+        <div class="w-full max-w-md bg-white rounded-xl shadow-2xl p-6">
+          <h2 class="text-xl font-bold text-gray-900 mb-2">Abandon Reservation?</h2>
+          <p class="text-gray-600 mb-6">
+            You will lose your reserved seats. This action cannot be undone.
+          </p>
+          <div class="flex gap-3 justify-end">
+            <button
+              @click="showAbandonModal = false"
+              class="px-4 py-2 text-gray-700 bg-gray-100 hover:bg-gray-200 rounded-lg transition-colors"
+            >
+              Keep Seats
+            </button>
+            <button
+              @click="handleAbandonCart"
+              class="px-4 py-2 bg-red-600 hover:bg-red-700 text-white font-medium rounded-lg transition-colors"
+            >
+              Abandon
+            </button>
+          </div>
+        </div>
+      </div>
+    </Transition>
   </div>
 </template>
+
+<style scoped>
+.fade-enter-active,
+.fade-leave-active {
+  transition: opacity 0.2s ease;
+}
+
+.fade-enter-from,
+.fade-leave-to {
+  opacity: 0;
+}
+</style>

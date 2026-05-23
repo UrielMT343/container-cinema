@@ -30,8 +30,8 @@ type seatStore interface {
 
 type cacheService interface {
 	GetCache(key string, ctx context.Context) (string, error)
-    SetCache(key string, value any, ttl time.Duration, ctx context.Context) error
-    BuildShowtimeSeatsKey(idShowtime int) string
+	SetCache(key string, value any, ttl time.Duration, ctx context.Context) error
+	BuildShowtimeSeatsKey(idShowtime int) string
 }
 
 type Hander struct {

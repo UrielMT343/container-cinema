@@ -1,3 +1,8 @@
+export interface CheckoutBeginResponse {
+  cartId: string;
+  expiresAt: string;
+}
+
 export interface ConfirmRequestPayload {
   email: string;
   ticketIds: string[];
@@ -27,7 +32,11 @@ export interface HeldTicket {
   status: string;
 }
 
+export type CheckoutStep = 'SEATS' | 'PAYMENT';
+
 export interface CheckoutSession {
-  ticketIds: string[];
+  expiresAt: string;
+  step: CheckoutStep;
   showtimeId: number;
+  ticketIds?: string[];
 }
