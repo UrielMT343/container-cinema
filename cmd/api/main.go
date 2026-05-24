@@ -150,7 +150,7 @@ func main() {
 	apiVersion := os.Getenv("API_VERSION")
 	basePrefix := fmt.Sprintf("/api/%s", apiVersion)
 
-	handler := routes(cfg, basePrefix, tokenSecret)
+	handler := routes(cfg, basePrefix, tokenSecret, rdb)
 
 	go queue.CleanupDLXTickets(rootCtx, ticketStore.DeleteTicket, rdb, globalBroker)
 

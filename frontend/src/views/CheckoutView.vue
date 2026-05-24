@@ -12,6 +12,7 @@ const payError = ref<string | null>(null);
 const confirmed = ref(false);
 const ticketCount = ref(0);
 const showAbandonModal = ref(false);
+const cartTTL = import.meta.env.VITE_CART_TTL_MINUTES ?? "15";
 
 onMounted(() => {
   const raw = sessionStorage.getItem('checkout-session');
@@ -94,7 +95,7 @@ function handleAbandonCart() {
 
       <!-- Checkout Form -->
       <div v-else class="bg-white rounded-xl shadow-lg p-8">
-        <CountdownTimer />
+        <CountdownTimer :active="true" />
 
         <button
           class="mb-6 inline-flex items-center gap-2 text-red-600 hover:text-red-800 transition-colors"
@@ -118,7 +119,7 @@ function handleAbandonCart() {
             <span class="text-lg font-bold text-gray-900">{{ ticketCount }}</span>
           </div>
           <p class="text-xs text-gray-500 mt-2">
-            Seats are reserved for 15 minutes.
+            Seats are reserved for {{ cartTTL }} minutes.
           </p>
         </div>
 

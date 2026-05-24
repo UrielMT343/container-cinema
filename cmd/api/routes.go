@@ -13,6 +13,8 @@ import (
 	"start/internal/ticket"
 	"start/internal/user"
 
+	redisclient "start/internal/redis"
+
 	_ "start/docs"
 
 	httpSwagger "github.com/swaggo/http-swagger"
@@ -27,7 +29,7 @@ type Config struct {
 	eventHandler    *events.Handler
 }
 
-func routes(c *Config, basePrefix string, secret string) http.Handler {
+func routes(c *Config, basePrefix string, secret string, redis *redisclient.Redis) http.Handler {
 	mainMux := http.NewServeMux()
 	mainMux.HandleFunc("GET /health", health.HealthCheck)
 
@@ -61,7 +63,7 @@ func routes(c *Config, basePrefix string, secret string) http.Handler {
 
 	publicStack := middleware.CreateChain(publicMux, middleware.RateLimiter)
 	adminStack := middleware.CreateChain(adminMux, middleware.RateLimiter, middleware.AdminAuth(secret))
-	userStack := middleware.CreateChain(userMux, middleware.RateLimiter, middleware.CartAuth())
+	userStack := middleware.CreateChain(userMux, middleware.RateLimiter, middleware.CartAuth(redis))
 
 	apiMux.Handle("/public/", http.StripPrefix("/public", publicStack))
 	apiMux.Handle("/admin/", http.StripPrefix("/admin", adminStack))

@@ -61,6 +61,7 @@ type cacheService interface {
 	SetCacheNX(key string, value any, ttl time.Duration, ctx context.Context) (bool, error)
 	Expire(key string, ttl time.Duration, ctx context.Context) error
 	BuildCartKey(cartIDstr string) string
+	TTL(key string, ctx context.Context) (time.Duration, error)
 }
 
 type queueService interface {
@@ -267,29 +268,18 @@ func (h *Handler) HoldTicket(w http.ResponseWriter, r *http.Request) {
 		reqTicket.Email = nil
 	}
 
-	expStr, _ := h.cache.GetCache(cartID, ctx)
-
-	var expStrDecoded string
-
-	errUM := json.Unmarshal([]byte(expStr), &expStrDecoded)
-	if errUM != nil {
-		slog.Error("Failed to unmarshal ttl data", "error", err)
+	ttl, errTTL := h.cache.TTL(cartID, ctx)
+	if errTTL != nil {
+		slog.Error("Failed to get cart ttl", "error", errTTL)
 		response.Error(w, http.StatusInternalServerError, "An unexpected error occurred")
 		return
 	}
 
-	exp, errParse := time.Parse(time.RFC3339Nano, expStrDecoded)
-	if errParse != nil {
-		slog.Error("Failed to parse ttl data", "error", errParse)
-		response.Error(w, http.StatusInternalServerError, "An unexpected error occurred")
+	if ttl <= 0 {
+		slog.Warn("Cart has no valid ttl", "cartID", cartID, "ttl", ttl)
+		response.Error(w, http.StatusNotFound, "Cart expired or not found")
 		return
 	}
-
-	ttl := time.Until(exp)
-
-	slog.Info("Time value", "expiry", ttl)
-
-	// ttl := time.Duration(config.HoldTicketTTLMinutes)
 
 	var tickets []models.Ticket
 	for _, seatID := range reqTicket.IDSeats {
@@ -425,11 +415,12 @@ func (h *Handler) BeginCheckout(w http.ResponseWriter, r *http.Request) {
 	tokenExp := config.CartIDCookieTTLMinutes
 
 	expiresAt := time.Now().Add(tokenExp)
-	expiresAtStr := expiresAt.UTC().Format(time.RFC3339Nano)
 
-	errorCache := h.cache.SetCache(cartIDstr, expiresAtStr, tokenExp, ctx)
+	errorCache := h.cache.SetCache(cartIDstr, "1", tokenExp, ctx)
 	if errorCache != nil {
 		slog.Error("Error setting the cache", "error", errorCache, "key", cartIDstr)
+		response.Error(w, http.StatusInternalServerError, "An unexpected error occurred")
+		return
 	}
 
 	httpCookie := http.Cookie{
@@ -438,7 +429,7 @@ func (h *Handler) BeginCheckout(w http.ResponseWriter, r *http.Request) {
 		Expires:  time.Now().Add(tokenExp),
 		HttpOnly: true,
 		Secure:   true,
-		SameSite: http.SameSiteNoneMode,
+		SameSite: http.SameSiteStrictMode,
 		Path:     "/",
 	}
 

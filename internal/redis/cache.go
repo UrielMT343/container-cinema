@@ -111,3 +111,11 @@ func (client *Redis) IncrBy(key string, value int64, ctx context.Context) (int64
 func (client *Redis) DecrBy(key string, value int64, ctx context.Context) (int64, error) {
 	return client.Client.DecrBy(ctx, key, value).Result()
 }
+
+func (client *Redis) TTL(key string, ctx context.Context) (time.Duration, error) {
+	return client.Client.TTL(ctx, key).Result()
+}
+
+func (client *Redis) Exists(ctx context.Context, keys ...string) (int64, error) {
+	return client.Client.Exists(ctx, keys...).Result()
+}

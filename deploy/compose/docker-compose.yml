@@ -50,8 +50,6 @@ services:
       dockerfile: deploy/docker/api.Dockerfile
     container_name: go_backend
     restart: always
-    ports:
-      - "8090:8080"
     env_file:
       - ../../.env
     depends_on:
@@ -121,5 +119,6 @@ volumes:
 networks:
   backend:
     driver: bridge
+    internal: true
   frontend:
     driver: bridge

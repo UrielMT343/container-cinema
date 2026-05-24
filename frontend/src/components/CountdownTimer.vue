@@ -1,10 +1,15 @@
 <script setup lang="ts">
-import { ref, onMounted, onUnmounted } from 'vue';
-import { useRouter } from 'vue-router';
+import { ref, watch, onUnmounted } from 'vue';
 import type { CheckoutSession } from '@/types/cart';
 import { isSessionExpired } from '@/composables/useSessionExpired';
 
-const router = useRouter();
+const props = defineProps({
+  active: {
+    type: Boolean,
+    default: false,
+  },
+});
+
 const display = ref('');
 const expired = ref(false);
 let intervalId: ReturnType<typeof setInterval> | null = null;
@@ -48,21 +53,17 @@ function tick(): void {
   display.value = `${pad(minutes)}:${pad(seconds)}`;
 }
 
-onMounted(() => {
-  const raw = sessionStorage.getItem('checkout-session');
-  if (raw) {
-    let session: CheckoutSession;
-    try {
-      session = JSON.parse(raw);
-    } catch {
-      return;
-    }
-    if (session.expiresAt) {
-      tick();
+watch(() => props.active, (isActive) => {
+  if (isActive) {
+    tick();
+    if (!intervalId) {
       intervalId = setInterval(tick, 1000);
     }
+  } else if (intervalId !== null) {
+    clearInterval(intervalId);
+    intervalId = null;
   }
-});
+}, { immediate: true });
 
 onUnmounted(() => {
   if (intervalId !== null) {

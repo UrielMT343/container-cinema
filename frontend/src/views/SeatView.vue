@@ -114,7 +114,7 @@ const handleCancel = () => {
 
     <h1 class="text-3xl font-bold mb-6 text-gray-900">Seats for Showtime #{{ showtimeId }}</h1>
 
-    <CountdownTimer />
+    <CountdownTimer :active="cartInitialized" />
 
     <div v-if="isLoading" class="text-center py-12">
       <p class="text-gray-500 text-lg">Loading seats...</p>

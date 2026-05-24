@@ -4,7 +4,9 @@ import (
 	"context"
 	"log/slog"
 	"net/http"
+
 	"start/internal/auth"
+	redisclient "start/internal/redis"
 	"start/internal/response"
 )
 
@@ -44,7 +46,7 @@ func AdminAuth(tokenSecret string) func(http.Handler) http.Handler {
 	}
 }
 
-func CartAuth() func(http.Handler) http.Handler {
+func CartAuth(redis *redisclient.Redis) func(http.Handler) http.Handler {
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			cookie, err := r.Cookie("cart_id")
@@ -55,6 +57,19 @@ func CartAuth() func(http.Handler) http.Handler {
 			}
 
 			cartID := cookie.Value
+
+			exists, err := redis.Exists(r.Context(), cartID)
+			if err != nil {
+				slog.Warn("Request rejected by middleware: could not found cartID on registry", "error", err)
+				response.Error(w, http.StatusInternalServerError, "Unauthorized")
+				return
+			}
+
+			if exists == 0 {
+				slog.Warn("Request rejected by middleware: could not found cartID on registry", "exists", exists)
+				response.Error(w, http.StatusUnauthorized, "Unauthorized")
+				return
+			}
 
 			ctx := context.WithValue(r.Context(), auth.CartContextKey, cartID)
 
