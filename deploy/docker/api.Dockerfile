@@ -1,4 +1,4 @@
-FROM golang:1.26.0-alpine3.23 AS base
+FROM golang:1.26.4-alpine3.23 AS base
 
 WORKDIR /src
 
@@ -12,10 +12,12 @@ COPY . .
 
 FROM base AS security
 
+RUN apk add --no-cache git
+
 RUN --mount=type=cache,target=/go/pkg/mod \
     --mount=type=cache,target=/root/.cache/go-build \
     go install github.com/securego/gosec/v2/cmd/gosec@v2.22.8 && \
-    go install golang.org/x/vuln/cmd/govulncheck@1.1.14 && \
+    go install golang.org/x/vuln/cmd/govulncheck@v1.1.4 && \
     gosec ./... && \
     govulncheck ./...
 
