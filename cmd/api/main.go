@@ -63,7 +63,8 @@ func main() {
 	pgPort := os.Getenv("POSTGRES_PORT")
 	pgDB := os.Getenv("POSTGRES_DB")
 
-	url := fmt.Sprintf("postgres://%s:%s@%s:%s/%s",
+	url := fmt.Sprintf(
+		"postgres://%s:%s@%s:%s/%s",
 		pgUser, pgPass, pgHost, pgPort, pgDB,
 	)
 	service, err := database.NewConnection(rootCtx, url)
@@ -77,7 +78,8 @@ func main() {
 	rabbitHost := os.Getenv("RABBITMQ_HOST")
 	rabbitPort := os.Getenv("AMQP_PORT")
 
-	rabbitURL := fmt.Sprintf("amqp://%s:%s@%s:%s/",
+	rabbitURL := fmt.Sprintf(
+		"amqp://%s:%s@%s:%s/",
 		rabbitUser,
 		rabbitPass,
 		rabbitHost,
@@ -103,7 +105,8 @@ func main() {
 	redisPort := os.Getenv("REDIS_PORT")
 	redisDB := os.Getenv("REDIS_DB")
 
-	redisURL := fmt.Sprintf("redis://%s:%s@%s:%s/%s",
+	redisURL := fmt.Sprintf(
+		"redis://%s:%s@%s:%s/%s",
 		redisUser,
 		redisPassword,
 		redisHost,
@@ -159,8 +162,12 @@ func main() {
 	apiAddr := fmt.Sprintf(":%s", apiPort)
 
 	srv := &http.Server{
-		Addr:    apiAddr,
-		Handler: handler,
+		Addr:              apiAddr,
+		Handler:           handler,
+		ReadHeaderTimeout: 3 * time.Second,
+		ReadTimeout:       5 * time.Second,
+		WriteTimeout:      0,
+		IdleTimeout:       120 * time.Second,
 	}
 
 	slog.Info("Server started", "Port", apiPort)

@@ -48,26 +48,15 @@ func (b *ShowtimeBroker) Broadcast(showtimeID int, message []byte) {
 	b.mu.RLock()
 	defer b.mu.RUnlock()
 
-	slog.Info("Message received for broadcast", "size", len(message))
-
 	clientMap, exists := b.clients[showtimeID]
 	if !exists {
-		slog.Warn("Broadcast aborted: No clients listening for this showtime",
-					"target_showtime_id", showtimeID,
-					"active_rooms_count", len(b.clients))
 		return
 	}
-
-	slog.Info("Broadcasting to clients",
-	    "showtime_id", showtimeID,
-	    "client_count", len(clientMap),
-	    "message", string(message),
-	)
 
 	for clientChan := range clientMap {
 		select {
 		case clientChan <- message:
-			slog.Info("Successfully pushed message to a client channel")
+
 		default:
 			slog.Warn("Dropped message: client channel buffer is full")
 		}

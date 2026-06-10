@@ -46,11 +46,10 @@ func (h *Handler) StreamShowtimeSeats(w http.ResponseWriter, r *http.Request) {
 	for {
 		select {
 		case <-r.Context().Done():
-			slog.Info("Client disconnected from showtime", "showtime_id", showtimeID)
 			return
 
 		case msg := <-clientChan:
-			slog.Info("Message received", "msg",  string(msg))
+			slog.Info("Message received", "msg", string(msg))
 			_, err := w.Write(msg)
 			if err != nil {
 				slog.Error("Failed to write SSE data", "error", err)

@@ -3,6 +3,7 @@ package main
 import (
 	"net/http"
 	"strings"
+	"time"
 
 	"start/internal/events"
 	"start/internal/health"
@@ -61,9 +62,11 @@ func routes(c *Config, basePrefix string, secret string, redis *redisclient.Redi
 		prefix += "/"
 	}
 
-	publicStack := middleware.CreateChain(publicMux, middleware.RateLimiter)
-	adminStack := middleware.CreateChain(adminMux, middleware.RateLimiter, middleware.AdminAuth(secret))
-	userStack := middleware.CreateChain(userMux, middleware.RateLimiter, middleware.CartAuth(redis))
+	apiTimeout := 10 * time.Second
+
+	publicStack := middleware.CreateChain(publicMux, middleware.RateLimiter, middleware.RestTimeout(apiTimeout))
+	adminStack := middleware.CreateChain(adminMux, middleware.RateLimiter, middleware.AdminAuth(secret), middleware.RestTimeout(apiTimeout))
+	userStack := middleware.CreateChain(userMux, middleware.RateLimiter, middleware.CartAuth(redis), middleware.RestTimeout(apiTimeout))
 
 	apiMux.Handle("/public/", http.StripPrefix("/public", publicStack))
 	apiMux.Handle("/admin/", http.StripPrefix("/admin", adminStack))
