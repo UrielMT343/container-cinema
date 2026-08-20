@@ -1,7 +1,7 @@
 apiVersion: argoproj.io/v1alpha1
 kind: Application
 metadata:
-  name: cloudcinema-dependencies
+  name: cloudcinema-redis
   namespace: argocd
 spec:
   project: default
@@ -28,6 +28,10 @@ spec:
     repoURL: 'registry-1.docker.io/bitnamicharts'
     targetRevision: 16.0.14
     chart: rabbitmq
+    helm:
+      parameters:
+        - name: image.tag
+          value: latest
   destination:
     server: 'https://kubernetes.default.svc'
     namespace: default
