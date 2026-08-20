@@ -6,8 +6,8 @@ metadata:
 spec:
   project: default
   source:
-    repoURL: 'https://charts.bitnami.com/bitnami'
-    targetRevision: 14.0.0
+    repoURL: 'registry-1.docker.io/bitnamicharts'
+    targetRevision: 28.0.7
     chart: redis
   destination:
     server: 'https://kubernetes.default.svc'
@@ -25,8 +25,8 @@ metadata:
 spec:
   project: default
   source:
-    repoURL: 'https://charts.bitnami.com/bitnami'
-    targetRevision: 14.0.0
+    repoURL: 'registry-1.docker.io/bitnamicharts'
+    targetRevision: 16.0.14
     chart: rabbitmq
   destination:
     server: 'https://kubernetes.default.svc'
