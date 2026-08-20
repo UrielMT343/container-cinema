@@ -32,6 +32,10 @@ spec:
       parameters:
         - name: image.tag
           value: latest
+        - name: osShellImage.tag
+          value: latest
+        - name: volumePermissions.image.tag
+          value: latest
   destination:
     server: 'https://kubernetes.default.svc'
     namespace: default
