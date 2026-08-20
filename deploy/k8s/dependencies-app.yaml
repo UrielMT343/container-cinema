@@ -16,28 +16,3 @@ spec:
     automated:
       prune: true
       selfHeal: true
----
-apiVersion: argoproj.io/v1alpha1
-kind: Application
-metadata:
-  name: cloudcinema-rabbitmq
-  namespace: argocd
-spec:
-  project: default
-  source:
-    repoURL: 'registry-1.docker.io/bitnamicharts'
-    targetRevision: 16.0.14
-    chart: rabbitmq
-    helm:
-      parameters:
-        - name: image.repository
-          value: bitnamilegacy/rabbitmq
-        - name: volumePermissions.image.repository
-          value: bitnamilegacy/os-shell
-  destination:
-    server: 'https://kubernetes.default.svc'
-    namespace: default
-  syncPolicy:
-    automated:
-      prune: true
-      selfHeal: true
