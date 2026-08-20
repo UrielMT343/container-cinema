@@ -9,6 +9,8 @@ spec:
         - name: migrator
           image: urielmt343/cinema_migrator:latest
           envFrom:
+            - configMapRef:
+                name: app-config
             - secretRef:
                 name: secret-store
       restartPolicy: Never

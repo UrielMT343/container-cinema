@@ -20,5 +20,7 @@ spec:
           ports:
             - containerPort: 8080
           envFrom:
+            - configMapRef:
+                name: app-config
             - secretRef:
                 name: secret-store
