@@ -1,0 +1,47 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: app-config
+data:
+  # PostgreSQL database
+  POSTGRES_VERSION: "18.1-alpine"
+  POSTGRES_HOST_PORT: "5435"
+  POSTGRES_PORT: "5432"
+  POSTGRES_DB: "cinema"
+  DATABASE_HOST: "postgres"
+
+  # Redis
+  REDIS_VERSION: "8.4-alpine"
+  REDIS_PORT: "6379"
+  REDIS_HOST: "redis"
+  REDIS_USER: "default"
+  REDIS_DB: "0"
+  REDIS_PROTOCOL: "2"
+
+  # RabbitMQ
+  RABBITMQ_VERSION: "4.2-management-alpine"
+  AMQP_PORT: "5672"
+  MANAGEMENT_UI_PORT: "15672"
+  RABBITMQ_HOST: "rabbitmq"
+
+  # Backend API
+  API_PORT: "8080"
+  CACHE_TTL_MINUTES: "30"
+  HOLD_TICKET_TTL_MINUTES: "1"
+  API_VERSION: "v1"
+  CARTID_COOKIE_TTL_MINUTES: "1"
+  SEATS_LIMIT: "5"
+  WORKER_COUNT: "5"
+
+  # Migrator & NGINX
+  GO_VERSION: "1.26.4-alpine3.23"
+  NGINX_VERSION: "1.30.0-alpine"
+  NGINX_HTTPS_PORT: "8443"
+  NGINX_HTTP_PORT: "8080"
+
+  # Frontend
+  VITE_API_URL: "/api/v1/"
+  VITE_CART_TTL_MINUTES: "1"
+
+  # Docker Hub User (Public info)
+  DOCKERHUB_USERNAME: "urielmt343"
