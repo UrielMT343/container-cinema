@@ -14,8 +14,7 @@ spec:
     spec:
       containers:
         - name: nginx
-          # The version is hardcoded as the source of truth
-          image: urielmt343/cloudcinema-frontend:1.30.0-alpine
+          image: urielmt343/cloudcinema-frontend:latest
           ports:
             - containerPort: 8080
           envFrom:
