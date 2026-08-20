@@ -30,12 +30,10 @@ spec:
     chart: rabbitmq
     helm:
       parameters:
-        - name: image.tag
-          value: latest
-        - name: osShellImage.tag
-          value: latest
-        - name: volumePermissions.image.tag
-          value: latest
+        - name: image.repository
+          value: bitnamilegacy/rabbitmq
+        - name: volumePermissions.image.repository
+          value: bitnamilegacy/os-shell
   destination:
     server: 'https://kubernetes.default.svc'
     namespace: default
