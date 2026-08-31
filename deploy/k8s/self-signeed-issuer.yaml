@@ -1,0 +1,20 @@
+apiVersion: cert-manager.io/v1
+kind: ClusterIssuer
+metadata:
+  name: selfsigned-issuer
+spec:
+  selfSigned: {}
+---
+apiVersion: cert-manager.io/v1
+kind: Certificate
+metadata:
+  name: nginx-tls
+  namespace: default
+spec:
+  secretName: nginx-tls
+  dnsNames:
+    - localhost
+    - cinema-cloud.com
+  issuerRef:
+    name: selfsigned-issuer
+    kind: ClusterIssuer
