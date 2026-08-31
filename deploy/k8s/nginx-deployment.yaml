@@ -21,16 +21,16 @@ spec:
           envFrom:
             - configMapRef:
                 name: app-config
-                volumeMounts:
-                  - name: tls-certs
-                    mountPath: /etc/letsencrypt/live/cinema-cloud.com
-                    readOnly: true
-                volumes:
-                  - name: tls-certs
-                    secret:
-                      secretName: nginx-tls
-                      items:
-                        - key: tls.crt
-                          path: fullchain.pem
-                        - key: tls.key
-                          path: privkey.pem
+          volumeMounts:
+            - name: tls-certs
+              mountPath: /etc/letsencrypt/live/cinema-cloud.com
+              readOnly: true
+      volumes:
+        - name: tls-certs
+          secret:
+            secretName: nginx-tls
+            items:
+              - key: tls.crt
+                path: fullchain.pem
+              - key: tls.key
+                path: privkey.pem
